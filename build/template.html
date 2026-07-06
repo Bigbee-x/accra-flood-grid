@@ -5,46 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Accra // flood grid</title>
 <style>
-  html, body { margin:0; padding:0; overflow:hidden; background:#07090c; height:100%; }
+  html, body { margin:0; padding:0; overflow:hidden; background:#efe9dc; height:100%; }
   canvas { display:block; }
   #panel {
     position:fixed; top:16px; left:16px; width:300px; z-index:10;
-    background:rgba(13,16,21,.87); border:1px solid #232a35; border-radius:12px;
+    background:rgba(252,250,245,.92); border:1px solid #d8cec0; border-radius:12px;
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    font:13px "Helvetica Neue", Helvetica, Arial, sans-serif; color:#e8ebef;
+    box-shadow:0 2px 14px rgba(80,65,45,.14);
+    font:13px "Helvetica Neue", Helvetica, Arial, sans-serif; color:#2b2620;
     padding:14px 16px 12px; user-select:none;
   }
-  #panel h1 { font-size:15px; margin:0 0 2px; font-weight:600; letter-spacing:.3px; }
-  #panel .sub { color:#8b95a3; font-size:11.5px; margin-bottom:10px; }
+  #panel h1 { font-size:15px; margin:0 0 2px; font-weight:600; letter-spacing:.3px; color:#1f1b16; }
+  #panel .sub { color:#7a6f60; font-size:11.5px; margin-bottom:10px; }
   .row { display:flex; justify-content:space-between; align-items:center; margin:3px 0; }
-  .muted { color:#8b95a3; }
-  .val { color:#e8ebef; font-variant-numeric:tabular-nums; }
-  .big { font-size:16px; font-weight:600; color:#37e0ff; font-variant-numeric:tabular-nums; }
-  .danger { color:#ff2d95; }
-  .sec { border-top:1px solid #232a35; margin:10px -16px 0; padding:8px 16px 0; }
-  .sec .t { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#8b95a3; margin-bottom:6px; }
+  .muted { color:#7a6f60; }
+  .val { color:#2b2620; font-variant-numeric:tabular-nums; }
+  .big { font-size:16px; font-weight:600; color:#1d6fd1; font-variant-numeric:tabular-nums; }
+  .danger { color:#e8590c; }
+  .sec { border-top:1px solid #e4dccd; margin:10px -16px 0; padding:8px 16px 0; }
+  .sec .t { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#a09280; margin-bottom:6px; }
   .btns { display:flex; gap:6px; margin:6px 0; }
   button {
-    flex:1; background:#161b24; color:#cdd5df; border:1px solid #2a3341; border-radius:7px;
+    flex:1; background:#f6f1e7; color:#4a4238; border:1px solid #d8cec0; border-radius:7px;
     font:11.5px "Helvetica Neue", Helvetica, Arial, sans-serif; padding:5px 4px; cursor:pointer;
   }
-  button:hover { border-color:#ff2d95; }
-  button.on { background:#2a1220; border-color:#ff2d95; color:#ff8cc4; }
+  button:hover { border-color:#e8590c; }
+  button.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; }
   button.play { font-weight:600; }
-  input[type=range] { width:110px; accent-color:#ff2d95; height:14px; }
-  input[type=checkbox] { accent-color:#ff2d95; }
+  input[type=range] { width:110px; accent-color:#e8590c; height:14px; }
+  input[type=checkbox] { accent-color:#e8590c; }
   label.chk { display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer; }
   .legend { height:8px; border-radius:4px; margin:6px 0 2px;
-    background:linear-gradient(90deg,#0d3550 0%,#1899b3 30%,#1257a0 60%,#26336e 80%,#ff2d95 100%); }
-  .legrow { display:flex; justify-content:space-between; color:#8b95a3; font-size:10.5px; }
-  .hint { color:#8b95a3; font-size:10.5px; margin-top:8px; line-height:1.5; }
-  .note { color:#5f6a78; font-size:10px; margin-top:6px; line-height:1.45; }
+    background:linear-gradient(90deg,#dbe9f7 0%,#7db4e6 30%,#1d6fd1 60%,#0b3f8a 80%,#e8590c 100%); }
+  .legrow { display:flex; justify-content:space-between; color:#7a6f60; font-size:10.5px; }
+  .hint { color:#7a6f60; font-size:10.5px; margin-top:8px; line-height:1.5; }
+  .note { color:#a09280; font-size:10px; margin-top:6px; line-height:1.45; }
 </style>
 </head>
 <body>
 <div id="panel">
   <h1>Accra // flood grid</h1>
-  <div class="sub">Odaw basin &middot; storm replay &middot; night grid</div>
+  <div class="sub">Odaw basin &middot; storm replay &middot; live water</div>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -81,9 +82,8 @@
   </div>
 
   <div class="sec"><div class="t">Look</div>
-    <label class="chk"><input type="checkbox" id="bloomChk" checked> Bloom glow</label>
-    <label class="chk"><input type="checkbox" id="scanChk" checked> Floor scanlines</label>
-    <label class="chk"><input type="checkbox" id="pulseChk"> City pulse</label>
+    <label class="chk"><input type="checkbox" id="bloomChk"> Bloom glow</label>
+    <label class="chk"><input type="checkbox" id="scanChk"> Floor lines</label>
     <div class="row"><span class="muted">Building density</span>
       <input type="range" id="densSlider" min="10" max="100" value="100"></div>
   </div>
@@ -157,8 +157,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07090c);
-scene.fog = new THREE.Fog(0x07090c, 9000, 34000);
+scene.background = new THREE.Color(0xefe9dc);
+scene.fog = new THREE.Fog(0xefe9dc, 9000, 34000);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 10, 80000);
 camera.position.set(700, 2400, 11800);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -170,7 +170,7 @@ controls.target.set(1200, 0, 5200); // Kwame Nkrumah Circle / lower Odaw
 // ---------- shared sim uniforms ----------
 const texel = 1 / GN;
 const uTime = { value: 0 }, uCam = { value: new THREE.Vector3() },
-      uScan = { value: 1 }, uPulse = { value: 0 }, uSpanU = { value: SPAN };
+      uScan = { value: 0 }, uPulse = { value: 0 }, uSpanU = { value: SPAN };
 
 // terrain elevation texture (R32F, texel-aligned with grid mesh)
 const terrTex = new THREE.DataTexture(elev, GN, GN, THREE.RedFormat, THREE.FloatType);
@@ -308,7 +308,8 @@ function gridGeometry() {
   let t = 0;
   for (let j = 0; j < GN - 1; j++) for (let i = 0; i < GN - 1; i++) {
     const a = j * GN + i, b = a + 1, c = a + GN, d = c + 1;
-    idx[t++] = a; idx[t++] = c; idx[t++] = b; idx[t++] = b; idx[t++] = c; idx[t++] = d;
+    // world z = HALF - my flips handedness: wind a,b,c so normals face +y
+    idx[t++] = a; idx[t++] = b; idx[t++] = c; idx[t++] = b; idx[t++] = d; idx[t++] = c;
   }
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
@@ -331,11 +332,11 @@ const terrMat = new THREE.ShaderMaterial({
     void main(){
       float m = texture2D(uAux, vUv).g * 255.0;
       float t = clamp(vE / 220.0, 0.0, 1.0);
-      vec3 c = mix(vec3(0.043, 0.055, 0.075), vec3(0.10, 0.14, 0.20), t);
+      vec3 c = mix(vec3(0.845, 0.800, 0.700), vec3(0.635, 0.560, 0.450), t);
       float contour = smoothstep(0.92, 1.0, fract(vE / 10.0));
-      c += contour * vec3(0.020, 0.030, 0.045);
-      c = mix(c, vec3(0.030, 0.062, 0.085), max(bit0(m), bit1(m)) * 0.9);
-      c = mix(c, vec3(0.045, 0.075, 0.055), bit2(m) * 0.6);
+      c -= contour * vec3(0.055, 0.050, 0.045);
+      c = mix(c, vec3(0.700, 0.760, 0.820), max(bit0(m), bit1(m)) * 0.9);
+      c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
       gl_FragColor = vec4(c, 1.0);
     }`,
   fog: false });
@@ -345,6 +346,8 @@ scene.add(terrainMesh);
 
 const waterU = {
   uTerr: { value: terrTex }, uDepth: { value: null }, uTime: uTime,
+  uFlux: { value: null }, uSpanW: { value: SPAN }, uCellW: { value: CELL },
+  uAuxW: { value: auxTex },
 };
 const waterMat = new THREE.ShaderMaterial({
   uniforms: waterU,
@@ -359,17 +362,29 @@ const waterMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform float uTime; varying float vD; varying vec2 vUv;
+    uniform float uTime, uSpanW, uCellW; uniform sampler2D uFlux, uAuxW;
+    varying float vD; varying vec2 vUv;
     void main(){
-      float a = smoothstep(0.02, 0.12, vD) * 0.88;
+      float a = smoothstep(0.02, 0.10, vD) * 0.94;
       if (a < 0.01) discard;
-      vec3 shallow = vec3(0.13, 0.75, 0.85), mid = vec3(0.10, 0.45, 0.80),
-           deep = vec3(0.07, 0.26, 0.52);
-      vec3 c = mix(shallow, mid, smoothstep(0.1, 1.2, vD));
-      c = mix(c, deep, smoothstep(1.2, 4.0, vD));
-      float shimmer = 0.04 * sin(vUv.x * 900.0 + uTime * 1.7) * sin(vUv.y * 800.0 - uTime * 1.3);
-      c += shimmer * smoothstep(0.05, 0.4, vD);
-      c = mix(c, vec3(1.0, 0.18, 0.58), smoothstep(1.5, 3.5, vD) * 0.35);
+      vec3 shallow = vec3(0.49, 0.66, 0.84), mid = vec3(0.16, 0.42, 0.75),
+           deep = vec3(0.05, 0.22, 0.48);
+      vec3 c = mix(shallow, mid, smoothstep(0.08, 1.0, vD));
+      c = mix(c, deep, smoothstep(1.0, 3.5, vD));
+      float m = texture2D(uAuxW, vUv).g * 255.0;
+      float open = step(0.5, mod(m, 2.0)); // ocean: tide-clamped, flux is noise
+      vec4 f = texture2D(uFlux, vUv);
+      vec2 vel = vec2(f.y - f.x, f.w - f.z) / max(vD * uCellW, 0.5);
+      float sp = length(vel) * (1.0 - open);
+      vec2 dir = sp > 1e-4 ? vel / sp : vec2(1.0, 0.0);
+      vec2 pos = vUv * uSpanW;
+      float phase = dot(pos, dir) * 0.15 - uTime * (2.0 + 9.0 * min(sp, 2.5));
+      float stream = (0.5 + 0.5 * sin(phase)) * smoothstep(0.03, 0.35, sp);
+      c += stream * vec3(0.10, 0.14, 0.18);
+      float still = 0.035 * sin(pos.x * 0.011 + uTime * 0.9) * sin(pos.y * 0.013 - uTime * 0.7);
+      c += still * (1.0 - smoothstep(0.03, 0.3, sp));
+      c = mix(c, vec3(0.95, 0.97, 1.0), smoothstep(0.9, 2.4, sp) * 0.30);
+      c = mix(c, vec3(0.91, 0.36, 0.06), smoothstep(1.6, 3.8, vD) * 0.35);
       gl_FragColor = vec4(c, a);
     }`,
   transparent: true, depthWrite: false, fog: false });
@@ -418,11 +433,11 @@ function ramp(h) {
   const t = Math.min(Math.max(Math.log(Math.max(h, 2.5) / 2.5) / Math.log(70 / 2.5), 0), 1);
   let r, g, b;
   if (t < 0.45) { const u = t / 0.45;
-    r = 44 + (116 - 44) * u; g = 66 + (132 - 66) * u; b = 108 + (166 - 108) * u; }
+    r = 206 + (222 - 206) * u; g = 193 + (212 - 193) * u; b = 168 + (192 - 168) * u; }
   else if (t < 0.75) { const u = (t - 0.45) / 0.3;
-    r = 116 + (159 - 116) * u; g = 132 + (216 - 132) * u; b = 166 + (232 - 166) * u; }
+    r = 222 + (238 - 222) * u; g = 212 + (233 - 212) * u; b = 192 + (222 - 192) * u; }
   else { const u = (t - 0.75) / 0.25;
-    r = 159 + (234 - 159) * u; g = 216 + (255 - 216) * u; b = 232 + (255 - 232) * u; }
+    r = 238 + (252 - 238) * u; g = 233 + (250 - 233) * u; b = 222 + (246 - 222) * u; }
   return [r, g, b];
 }
 let vk = 0;
@@ -448,7 +463,7 @@ for (let oi = 0; oi < nB; oi++) {
     const x1 = p[j * 2], y1 = p[j * 2 + 1], x2 = p[k * 2], y2 = p[k * 2 + 1];
     let ex = y2 - y1, ey = -(x2 - x1); // outward normal in map coords (CCW ring)
     const el = Math.hypot(ex, ey) || 1; ex /= el; ey /= el;
-    const lam = 0.42 + 0.58 * Math.max(0, ex * SUN[0] + ey * SUN[1]);
+    const lam = 0.62 + 0.38 * Math.max(0, ex * SUN[0] + ey * SUN[1]);
     const cr = br * lam, cg = bg * lam, cb = bb * lam;
     const nx = ex, nz = -ey;
     const X1 = wx(x1), Z1 = wz(y1), X2 = wx(x2), Z2 = wz(y2);
@@ -490,28 +505,21 @@ const bldMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * viewMatrix * w;
     }`,
   fragmentShader: `
-    uniform float uTime, uScan, uPulse, uFloodGlow, uSpan;
-    uniform vec3 uCam; uniform sampler2D uDepth;
+    uniform float uScan, uFloodGlow, uSpan;
+    uniform sampler2D uDepth;
     varying vec3 vC; varying vec3 vN; varying vec3 vW;
     void main(){
       vec3 c = vC;
       float wall = step(abs(vN.y), 0.6);
       float fl = fract(vW.y / 3.0);
       float band = smoothstep(0.55, 0.35, fl) * smoothstep(0.05, 0.25, fl);
-      c += uScan * wall * band * vec3(0.05, 0.12, 0.16);
-      float fr = pow(1.0 - abs(dot(normalize(vN), normalize(uCam - vW))), 2.6);
-      c += fr * vec3(0.18, 0.55, 0.70) * 0.55;
-      float dcen = length(vW.xz);
-      float ph = mod(dcen - uTime * 220.0, 2800.0);
-      float w = exp(-abs(ph - 200.0) / 110.0);
-      c += uPulse * w * mix(vec3(0.15, 0.5, 0.6), vec3(0.65, 0.12, 0.45),
-                            0.5 + 0.5 * sin(uTime * 0.7)) * 0.5;
+      c -= uScan * wall * band * vec3(0.07, 0.06, 0.05);
       vec2 uv = vec2((vW.x + uSpan * 0.5) / uSpan, (uSpan * 0.5 - vW.z) / uSpan);
       float d = texture2D(uDepth, uv).r;
-      c += uFloodGlow * vec3(1.0, 0.13, 0.55) * smoothstep(0.25, 1.6, d) * 0.75;
-      gl_FragColor = vec4(c * 1.22, 0.93);
+      c = mix(c, vec3(0.93, 0.35, 0.07), uFloodGlow * smoothstep(0.25, 1.4, d) * 0.85);
+      gl_FragColor = vec4(c, 1.0);
     }`,
-  transparent: true, depthWrite: true, fog: false });
+  transparent: false, depthWrite: true, fog: false });
 const bldMesh = new THREE.Mesh(bGeo, bldMat);
 bldMesh.frustumCulled = false; bldMesh.renderOrder = 2;
 scene.add(bldMesh);
@@ -543,15 +551,15 @@ function lineLayer(items, klass, colorFn, yOff, blending, opacity) {
   return mesh;
 }
 const roads = decodeLines(rLen, rStart, rDelta);
-const roadColors = [[92, 118, 168], [74, 95, 138], [58, 76, 112], [44, 59, 90]];
+const roadColors = [[97, 86, 70], [115, 103, 85], [131, 119, 100], [146, 135, 117]];
 const roadMesh = lineLayer(roads, rClass, c => roadColors[c], 1.2,
-                           THREE.NormalBlending, 0.75);
+                           THREE.NormalBlending, 0.7);
 roadMesh.renderOrder = 1; scene.add(roadMesh);
 const waterways = decodeLines(wLen, wStart, wDelta);
-const wwColors = { 0: [212, 38, 125], 1: [160, 31, 96], 2: [212, 38, 125],
-                   3: [255, 45, 149], 4: [255, 45, 149] };
+const wwColors = { 0: [235, 110, 20], 1: [205, 90, 18], 2: [226, 96, 16],
+                   3: [214, 64, 10], 4: [214, 64, 10] };
 const wwMesh = lineLayer(waterways, wClass, c => wwColors[c], 1.6,
-                         THREE.AdditiveBlending, 0.85);
+                         THREE.NormalBlending, 0.95);
 wwMesh.renderOrder = 3; scene.add(wwMesh);
 
 // ---------- rain streaks ----------
@@ -577,8 +585,8 @@ const rainMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: `
     uniform float uOn;
-    void main(){ if (uOn < 0.5) discard; gl_FragColor = vec4(0.35, 0.55, 0.75, 0.13); }`,
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    void main(){ if (uOn < 0.5) discard; gl_FragColor = vec4(0.25, 0.35, 0.46, 0.30); }`,
+  transparent: true, depthWrite: false, blending: THREE.NormalBlending, fog: false });
 const rainMesh = new THREE.LineSegments(rainGeo, rainMat);
 rainMesh.frustumCulled = false; rainMesh.renderOrder = 6;
 scene.add(rainMesh);
@@ -587,9 +595,9 @@ scene.add(rainMesh);
 const composer = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
 const bloom = new THREE.UnrealBloomPass(
-  new THREE.Vector2(innerWidth, innerHeight), 0.75, 0.45, 0.6);
+  new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.45, 0.85);
 composer.addPass(bloom);
-let bloomOn = true;
+let bloomOn = false;
 
 // ---------- storm state / UI ----------
 let simClock = 0, raining = false, running = true;
@@ -623,7 +631,6 @@ $("wetChk").onchange = e => simU.uWetMul.value = e.target.checked ? 2.2 : 1.0;
 $("tideSlider").oninput = e => simU.uSea.value = +e.target.value / 100;
 $("bloomChk").onchange = e => bloomOn = e.target.checked;
 $("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
-$("pulseChk").onchange = e => uPulse.value = e.target.checked ? 1 : 0;
 $("densSlider").oninput = e => {
   const k = Math.round(nB * (+e.target.value / 100));
   bGeo.setDrawRange(0, k > 0 ? cumV[k] : 0);
@@ -672,6 +679,7 @@ function animate() {
   }
   rainMesh.position.set(controls.target.x, 0, controls.target.z);
   waterU.uDepth.value = depthRT[cur].texture;
+  waterU.uFlux.value = fluxRT[cur].texture;
   bldU.uDepth.value = depthRT[cur].texture;
   if (++frame % 45 === 0) updateReadouts();
   if (bloomOn) composer.render(); else renderer.render(scene, camera);
@@ -681,8 +689,14 @@ addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
 });
-window.FG = { camera, controls, simU, simReset, storm,
+window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   setRain: v => { raining = v; }, readouts: updateReadouts,
+  sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
+    renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
+    const i = gy * GN + gx;
+    return { d: +readBuf[i * 4].toFixed(3), elev: +elev[i].toFixed(2),
+             mask: maskU8[i], conv: convU8[i] };
+  },
   run: (hours, rateMmH) => { // synchronous scripted run for scenario comparison
     raining = false;
     simU.uRain.value = (rateMmH || 0) * MM_H;

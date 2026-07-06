@@ -31,14 +31,15 @@ Interventions don't abolish the flood — they cut its reach in half and get hom
 OSM Ghana extract ─┐
 Copernicus GLO-30 ─┼─→ Python packer ─→ one 11 MB HTML
 storm presets ─────┘      (quantize, delta-encode, base64)
-                            ├─ three.js night-grid city (terrain + 209k extruded buildings)
+                            ├─ three.js sand-table city model (terrain + 209k extruded buildings)
                             ├─ GPU shallow-water sim (virtual pipes, ping-pong shaders, 512² @ 43 m)
                             └─ scenario UI with live readouts
 ```
 
 - **Terrain**: Copernicus GLO-30 DEM resampled to a 512² grid (UTM 30N), drainage channels burned in shallow (routing-only), ocean detected by connectivity and used as an absorbing tide boundary.
 - **Water**: virtual-pipes shallow-water solver in WebGL fragment shaders — rain, infiltration (scaled by building-density imperviousness), drain conveyance sinks, velocity-capped overland flow (1.3 m/s streets, 4.5 m/s channels), open boundaries.
-- **Buildings**: OSM footprints extruded; heights from `height`/`building:levels` where tagged (~10%), vernacular heuristic elsewhere; baked vertex-color shading + inundation glow shader.
+- **Buildings**: OSM footprints extruded; heights from `height`/`building:levels` where tagged (~10%), vernacular heuristic elsewhere; baked vertex-color shading, buildings turn orange as water reaches them.
+- **Look**: solid daylight "sand-table" palette — paper sky, sandstone city, orange drainage network, blue water whose surface streaks are advected by the simulation's own flux field, so the water visibly flows in the direction and speed the solver computes.
 
 ## Rebuild from scratch
 
