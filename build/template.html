@@ -90,6 +90,22 @@
   .risk.hi { background:#fbe0d2; color:#a13c05; }
   .risk.md { background:#faedd2; color:#8a6202; }
   .risk.lo { background:#e3eedd; color:#3d6b2a; }
+  #tourBtn { width:100%; box-sizing:border-box; margin:2px 0 10px; font-weight:600;
+    background:#fdeee0; border-color:#e8590c; color:#a13c05; padding:7px; font-size:12.5px; }
+  #tour { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:25;
+    width:min(580px,92vw); box-sizing:border-box; background:rgba(252,250,245,.96);
+    border:1px solid #d8cec0; border-radius:12px; box-shadow:0 4px 22px rgba(80,65,45,.22);
+    padding:13px 17px; display:none; flex-direction:column; gap:9px;
+    font:13px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#2b2620; }
+  #tourCap b { font-size:15.5px; }
+  #tourYr { color:#c44e07; font-size:11.5px; }
+  #tourTxt { color:#4a4238; line-height:1.55; margin-top:4px; display:block; }
+  #tourNav { display:flex; align-items:center; gap:8px; }
+  #tourNav button { flex:0 0 auto; padding:5px 13px; }
+  #tourExit { margin-left:auto; }
+  #tourProg { color:#7a6f60; font-size:11.5px; min-width:42px; text-align:center;
+    font-variant-numeric:tabular-nums; }
+  @media (max-width:520px){ #panel{ width:calc(100vw - 32px); } }
 </style>
 </head>
 <body>
@@ -100,6 +116,7 @@
     <input id="q" placeholder="Search a place — Alajo, Kaneshie, Circle&hellip;" autocomplete="off">
     <div id="qRes"></div>
   </div>
+  <button id="tourBtn">&#9654; Guided tour of the flood</button>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -185,6 +202,17 @@
   <div class="stat"><span class="muted">Water here now</span><span class="val" id="cardNow">–</span></div>
   <div class="stat"><span class="muted">Peak this run</span><span class="val" id="cardPeak">–</span></div>
   <div class="stat"><span class="muted">Ground elevation</span><span class="val" id="cardElev">–</span></div>
+</div>
+
+<div id="tour">
+  <div id="tourCap"><b id="tourName"></b> <span id="tourYr"></span>
+    <span id="tourTxt"></span></div>
+  <div id="tourNav">
+    <button id="tourPrev">&#8249; back</button>
+    <span id="tourProg">1 / 6</span>
+    <button id="tourNext">next &#8250;</button>
+    <button id="tourExit">exit tour</button>
+  </div>
 </div>
 
 <script>//__THREE__</script>
@@ -1197,6 +1225,57 @@ $("tlReplay").onclick = () => {
   replayAnim = { from: 0, to: snaps[snaps.length - 1].t, t0: uTime.value, dur: 7 };
 };
 
+// ---------- guided tour ----------
+const TOUR = [
+  { p: "Kwame Nkrumah Circle", c: "3 June 2015 — floodwater pooling here met a fuel-station fire. Over 150 people died in one night. The disaster that named Accra's flood era." },
+  { p: "Alajo", c: "Where the Odaw gathers the Nima, Onyasia and Ado streams. Among the first neighbourhoods under water in almost every storm." },
+  { p: "Old Fadama", c: "On the edge of the Korle Lagoon — the most flood-exposed community in the city, inundated in nearly every heavy rain." },
+  { p: "Agbogbloshie", c: "Where the Odaw finally meets the lagoon and the water has nowhere left to go. It backs up whenever the outfall chokes." },
+  { p: "Kaneshie", c: "Runoff off the western ridge overwhelms the drains; the market and First Light corridor flood again and again." },
+  { p: "Adabraka", c: "Flooded on 3 June 2026 — eleven years to the day after the 2015 catastrophe. Same river, same story." },
+];
+const STOP_DUR = 7.0;
+let tourActive = false, tourIdx = -1, tourStopT = 0;
+controls.autoRotateSpeed = 0.5;
+function tourStop() {
+  tourIdx++;
+  if (tourIdx >= TOUR.length) { endTour(); return; }
+  tourStopT = 0;
+  const item = TOUR[tourIdx];
+  const pl = places.find(p => p.n.toLowerCase() === item.p.toLowerCase());
+  if (pl) selectPlace(pl);
+  $("tourName").textContent = item.p;
+  $("tourYr").textContent = pl && pl.aff ? "· flooded " + pl.aff.y : "";
+  $("tourTxt").textContent = item.c;
+  $("tourProg").textContent = (tourIdx + 1) + " / " + TOUR.length;
+}
+function startTour() {
+  $("btnReset").click(); $("p2026").click();
+  reviewMode = false; $("tlLive").classList.add("on");
+  raining = true; simRate = 210; // paces the 6-stop tour to finish near peak (~T+2.5h)
+  document.querySelectorAll("#spdBtns button").forEach(x => x.classList.remove("on"));
+  $("btnRain").innerHTML = "&#9646;&#9646; pause storm"; $("btnRain").classList.add("on");
+  $("tourBtn").innerHTML = "&#9632; Stop tour";
+  tourActive = true; tourIdx = -1;
+  $("tour").style.display = "flex";
+  tourStop();
+}
+function endTour() {
+  tourActive = false; controls.autoRotate = false;
+  simRate = 150;
+  document.querySelectorAll("#spdBtns button").forEach(
+    x => x.classList.toggle("on", x.dataset.s === "150"));
+  raining = false; // freeze on the flood so the viewer can explore / scrub it
+  $("btnRain").innerHTML = "&#9654; start storm"; $("btnRain").classList.remove("on");
+  $("tour").style.display = "none";
+  $("tourBtn").innerHTML = "&#9654; Guided tour of the flood";
+  $("card").style.display = "none"; selPlace = null; marker.visible = false;
+}
+$("tourBtn").onclick = () => tourActive ? endTour() : startTour();
+$("tourNext").onclick = () => tourStop();
+$("tourPrev").onclick = () => { tourIdx = Math.max(-1, tourIdx - 2); tourStop(); };
+$("tourExit").onclick = () => endTour();
+
 // ---------- animate ----------
 sizeTL();
 simReset();
@@ -1249,6 +1328,11 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
+  if (tourActive) {
+    tourStopT += dt;
+    if (tourStopT > STOP_DUR) tourStop();
+  }
+  controls.autoRotate = tourActive && !flyTween;
   if (replayAnim) {
     const k = (uTime.value - replayAnim.t0) / replayAnim.dur;
     reviewT = replayAnim.from + (replayAnim.to - replayAnim.from) * Math.min(1, k);
@@ -1282,6 +1366,7 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
     reviewT, simClock, window: tlWindow() }),
   seek: t => { reviewT = t; enterReview(); applyReview(); },
   goLive: () => { reviewMode = false; replayAnim = null; tlLiveBtn.classList.add("on"); },
+  startTour, endTour, tourState: () => ({ active: tourActive, idx: tourIdx }),
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
     const i = gy * GN + gx;
