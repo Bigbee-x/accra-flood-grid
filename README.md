@@ -46,6 +46,7 @@ storm presets ─────┘      (quantize, delta-encode, base64)
 - **Water**: virtual-pipes shallow-water solver in WebGL fragment shaders — rain, infiltration (scaled by building-density imperviousness), drain conveyance sinks, velocity-capped overland flow (1.3 m/s streets, 4.5 m/s channels), open boundaries.
 - **Buildings**: OSM footprints extruded; heights from `height`/`building:levels` where tagged (~10%), vernacular heuristic elsewhere; baked vertex-color shading, buildings turn orange as water reaches them.
 - **Look**: solid daylight "sand-table" palette — paper sky, sandstone city, orange drainage network, blue water whose surface streaks are advected by the simulation's own flux field, so the water visibly flows in the direction and speed the solver computes.
+- **Weather**: procedural storm clouds roll in as the rain starts and darken with its intensity, casting drifting shadows on the city (the same wind-advected noise field is sampled in the terrain, building, and cloud shaders); the sky desaturates, rain streaks thicken with rainfall rate, and lightning flashes during heavy rain. Clouds linger through the recession, then clear. Time is frame-rate-independent with a ½× / 1× / 3× / 10× speed control — the default runs the 3-hour storm over ~70 seconds so you can watch it unfold.
 
 ## Rebuild from scratch
 

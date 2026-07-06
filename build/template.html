@@ -104,6 +104,11 @@
       <button id="p2026" class="on">Jun 29 2026</button>
       <button id="pCust">Custom</button>
     </div>
+    <div class="row"><span class="muted">Sim speed</span>
+      <span class="btns" style="flex:0 0 158px; margin:0" id="spdBtns">
+        <button data-s="75">&#189;&times;</button><button data-s="150" class="on">1&times;</button>
+        <button data-s="450">3&times;</button><button data-s="1500">10&times;</button>
+      </span></div>
     <div class="row"><span class="muted">Rain intensity</span>
       <input type="range" id="rainSlider" min="0" max="120" value="47" step="1"></div>
     <div class="row"><span class="muted">Storm clock</span><span class="big" id="rClock">T+0:00</span></div>
@@ -243,6 +248,17 @@ controls.target.set(1200, 0, 5200); // Kwame Nkrumah Circle / lower Odaw
 const texel = 1 / GN;
 const uTime = { value: 0 }, uCam = { value: new THREE.Vector3() },
       uScan = { value: 0 }, uPulse = { value: 0 }, uSpanU = { value: SPAN };
+// atmosphere: shared cloud cover, lightning flash, wind-driven noise offset
+const uCloudU = { value: 0.12 }, uFlashU = { value: 0 },
+      windOff = new THREE.Vector2(0, 0), uWindU = { value: windOff };
+const NOISE = `
+  float nhash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+    return mix(mix(nhash(i), nhash(i+vec2(1,0)), u.x),
+               mix(nhash(i+vec2(0,1)), nhash(i+vec2(1,1)), u.x), u.y); }
+  float fbm(vec2 p){ float v = 0.0, a = 0.55;
+    for (int i = 0; i < 4; i++) { v += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
+    return v; }`;
 
 // terrain elevation texture (R32F, texel-aligned with grid mesh)
 const terrTex = new THREE.DataTexture(elev, GN, GN, THREE.RedFormat, THREE.FloatType);
@@ -393,17 +409,21 @@ function gridGeometry() {
 }
 const grid = gridGeometry();
 const terrMat = new THREE.ShaderMaterial({
-  uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex } },
+  uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex },
+    uCloud: uCloudU, uWind: uWindU },
   vertexShader: `
-    uniform sampler2D uTerr; varying vec2 vUv; varying float vE;
+    uniform sampler2D uTerr; varying vec2 vUv; varying float vE; varying vec2 vXZ;
     void main(){
       vUv = uv; vE = texture2D(uTerr, uv).r;
       vec3 p = position; p.y = vE;
+      vXZ = p.xz;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform sampler2D uAux; varying vec2 vUv; varying float vE;
+    uniform sampler2D uAux; uniform float uCloud; uniform vec2 uWind;
+    varying vec2 vUv; varying float vE; varying vec2 vXZ;
     ${maskFns}
+    ${NOISE}
     void main(){
       float m = texture2D(uAux, vUv).g * 255.0;
       float t = clamp(vE / 220.0, 0.0, 1.0);
@@ -412,6 +432,8 @@ const terrMat = new THREE.ShaderMaterial({
       c -= contour * vec3(0.055, 0.050, 0.045);
       c = mix(c, vec3(0.700, 0.760, 0.820), max(bit0(m), bit1(m)) * 0.9);
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
+      float sh = fbm((vXZ + uWind) / 5200.0);
+      c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
     }`,
   fog: false });
@@ -422,7 +444,7 @@ scene.add(terrainMesh);
 const waterU = {
   uTerr: { value: terrTex }, uDepth: { value: null }, uTime: uTime,
   uFlux: { value: null }, uSpanW: { value: SPAN }, uCellW: { value: CELL },
-  uAuxW: { value: auxTex },
+  uAuxW: { value: auxTex }, uCloud: uCloudU,
 };
 const waterMat = new THREE.ShaderMaterial({
   uniforms: waterU,
@@ -437,7 +459,7 @@ const waterMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform float uTime, uSpanW, uCellW; uniform sampler2D uFlux, uAuxW;
+    uniform float uTime, uSpanW, uCellW, uCloud; uniform sampler2D uFlux, uAuxW;
     varying float vD; varying vec2 vUv;
     void main(){
       float a = smoothstep(0.02, 0.10, vD) * 0.94;
@@ -460,6 +482,7 @@ const waterMat = new THREE.ShaderMaterial({
       c += still * (1.0 - smoothstep(0.03, 0.3, sp));
       c = mix(c, vec3(0.95, 0.97, 1.0), smoothstep(0.9, 2.4, sp) * 0.30);
       c = mix(c, vec3(0.91, 0.36, 0.06), smoothstep(1.6, 3.8, vD) * 0.35);
+      c *= 1.0 - 0.14 * uCloud;
       gl_FragColor = vec4(c, a);
     }`,
   transparent: true, depthWrite: false, fog: false });
@@ -567,6 +590,7 @@ bGeo.setAttribute("normal", new THREE.BufferAttribute(nrmA, 3, true));
 const bldU = {
   uTime: uTime, uScan: uScan, uPulse: uPulse, uCam: uCam,
   uDepth: { value: null }, uSpan: uSpanU, uFloodGlow: { value: 1 },
+  uCloud: uCloudU, uWind: uWindU,
 };
 const bldMat = new THREE.ShaderMaterial({
   uniforms: bldU,
@@ -580,15 +604,19 @@ const bldMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * viewMatrix * w;
     }`,
   fragmentShader: `
-    uniform float uScan, uFloodGlow, uSpan;
+    uniform float uScan, uFloodGlow, uSpan, uCloud;
+    uniform vec2 uWind;
     uniform sampler2D uDepth;
     varying vec3 vC; varying vec3 vN; varying vec3 vW;
+    ${NOISE}
     void main(){
       vec3 c = vC;
       float wall = step(abs(vN.y), 0.6);
       float fl = fract(vW.y / 3.0);
       float band = smoothstep(0.55, 0.35, fl) * smoothstep(0.05, 0.25, fl);
       c -= uScan * wall * band * vec3(0.07, 0.06, 0.05);
+      float sh = fbm((vW.xz + uWind) / 5200.0);
+      c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       vec2 uv = vec2((vW.x + uSpan * 0.5) / uSpan, (uSpan * 0.5 - vW.z) / uSpan);
       float d = texture2D(uDepth, uv).r;
       c = mix(c, vec3(0.93, 0.35, 0.07), uFloodGlow * smoothstep(0.25, 1.4, d) * 0.85);
@@ -648,7 +676,8 @@ for (let i = 0; i < RAIN_N; i++) {
 }
 const rainGeo = new THREE.BufferGeometry();
 rainGeo.setAttribute("position", new THREE.BufferAttribute(rPos, 3));
-const rainU = { uTime: uTime, uOn: { value: 0 }, uH: { value: rainBoxH } };
+const rainU = { uTime: uTime, uOn: { value: 0 }, uH: { value: rainBoxH },
+                uRate: { value: 0 } };
 const rainMat = new THREE.ShaderMaterial({
   uniforms: rainU,
   vertexShader: `
@@ -659,12 +688,49 @@ const rainMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform float uOn;
-    void main(){ if (uOn < 0.5) discard; gl_FragColor = vec4(0.25, 0.35, 0.46, 0.30); }`,
+    uniform float uOn, uRate;
+    void main(){ if (uOn < 0.5) discard;
+      gl_FragColor = vec4(0.25, 0.35, 0.46, 0.30 * clamp(uRate / 45.0, 0.35, 1.25)); }`,
   transparent: true, depthWrite: false, blending: THREE.NormalBlending, fog: false });
 const rainMesh = new THREE.LineSegments(rainGeo, rainMat);
 rainMesh.frustumCulled = false; rainMesh.renderOrder = 6;
 scene.add(rainMesh);
+
+// ---------- storm clouds ----------
+const cloudGeo = new THREE.PlaneGeometry(SPAN * 1.7, SPAN * 1.7);
+const cloudMat = new THREE.ShaderMaterial({
+  uniforms: { uCloud: uCloudU, uFlash: uFlashU, uWind: uWindU, uTime: uTime },
+  vertexShader: `
+    varying vec2 vXZ;
+    void main(){
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vXZ = w.xz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    uniform float uCloud, uFlash, uTime; uniform vec2 uWind;
+    varying vec2 vXZ;
+    ${NOISE}
+    void main(){
+      vec2 p = (vXZ + uWind) / 5200.0;
+      float n = fbm(p + 0.05 * vec2(sin(uTime * 0.05), cos(uTime * 0.04)));
+      float n2 = fbm(p * 2.6 + 13.7);
+      float a = smoothstep(0.62 - 0.42 * uCloud, 0.95 - 0.25 * uCloud, n)
+              * (0.45 + 0.55 * uCloud) * 0.94;
+      if (a < 0.02) discard;
+      vec3 fair = vec3(0.985, 0.975, 0.955);
+      vec3 storm = mix(vec3(0.71, 0.71, 0.73), vec3(0.35, 0.37, 0.42),
+                       smoothstep(0.4, 1.0, 0.5 * n + 0.5 * n2));
+      vec3 c = mix(fair, storm, smoothstep(0.15, 0.75, uCloud));
+      c += uFlash * (0.55 + 0.6 * n) * vec3(1.0, 0.98, 0.9);
+      gl_FragColor = vec4(c, a);
+    }`,
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
+const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+cloudMesh.rotation.x = -Math.PI / 2;
+cloudMesh.position.y = 1950;
+cloudMesh.frustumCulled = false; cloudMesh.renderOrder = 7;
+scene.add(cloudMesh);
 
 // ---------- bloom ----------
 const composer = new THREE.EffectComposer(renderer);
@@ -675,9 +741,13 @@ composer.addPass(bloom);
 let bloomOn = false;
 
 // ---------- storm state / UI ----------
-let simClock = 0, raining = false, running = true, speedMul = 1;
+let simClock = 0, raining = false, running = true;
+let simRate = 150;      // sim-seconds per real second (1x = 1 s : 2.5 storm-min)
+let stepCarry = 0, cloudCov = 0.12, flashV = 0, fcPrevRate = 150;
 const storm = { schedule: [47, 47, 47] }; // mm/h per storm hour (hyetograph)
 const SIM_STEPS = 6, MM_H = 2.7778e-7;
+const BG_FAIR = new THREE.Color(0xefe9dc), BG_STORM = new THREE.Color(0xa9a59e),
+      BG_FLASH = new THREE.Color(0xfff8e0), bgCol = new THREE.Color();
 function setPreset(schedule, btn, sliderVal) {
   storm.schedule = schedule;
   if (sliderVal != null) document.getElementById("rainSlider").value = sliderVal;
@@ -705,6 +775,10 @@ $("wetChk").onchange = e => simU.uWetMul.value = e.target.checked ? 2.2 : 1.0;
 $("tideSlider").oninput = e => simU.uSea.value = +e.target.value / 100;
 $("bloomChk").onchange = e => bloomOn = e.target.checked;
 $("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
+for (const b of document.querySelectorAll("#spdBtns button"))
+  b.onclick = () => { simRate = +b.dataset.s;
+    document.querySelectorAll("#spdBtns button")
+      .forEach(x => x.classList.toggle("on", x === b)); };
 $("densSlider").oninput = e => {
   const k = Math.round(nB * (+e.target.value / 100));
   bGeo.setDrawRange(0, k > 0 ? cumV[k] : 0);
@@ -951,17 +1025,18 @@ function simulateWindow(startIdx) {
   if (!forecast) return;
   setPreset(forecast.mm.slice(startIdx, startIdx + 24), null);
   simReset();
-  raining = true; forecastRun = true; speedMul = 4;
+  raining = true; forecastRun = true;
+  fcPrevRate = simRate; simRate = 1500;
   $("btnRain").innerHTML = "&#9646;&#9646; pause storm";
   $("btnRain").classList.add("on");
   const wd = new Date(forecast.time[startIdx])
     .toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
   const tot = storm.schedule.reduce((a, b) => a + b, 0);
   $("fcOut").innerHTML =
-    `Simulating ${wd}: ${tot.toFixed(0)} mm over 24 h at 4&times; speed&hellip;`;
+    `Simulating ${wd}: ${tot.toFixed(0)} mm over 24 h, fast-forwarded&hellip;`;
 }
 function finishForecast() {
-  forecastRun = false; speedMul = 1;
+  forecastRun = false; simRate = fcPrevRate;
   const risk = peakFlood >= 6 ? ["hi", "HIGH"] :
     peakFlood >= 2.5 ? ["md", "MODERATE"] : ["lo", "LOW"];
   const hot = places.filter(p => p.peak > 0.3 && (p.aff || p.t === 0))
@@ -989,11 +1064,27 @@ function animate() {
     const active = raining && hi < storm.schedule.length;
     const rate = active ? storm.schedule[hi] : 0;
     simU.uRain.value = rate * MM_H;
-    rainU.uOn.value = rate > 0.2 ? 1 : 0;
     if (raining) {
-      simStep(SIM_STEPS * speedMul);
-      simClock += SIM_STEPS * speedMul * simU.uDt.value; // physical storm seconds
+      stepCarry += simRate * dt / simU.uDt.value;
+      if (stepCarry > 120) stepCarry = 120; // drop backlog after tab throttling
+      const n = Math.floor(stepCarry);
+      stepCarry -= n;
+      if (n > 0) { simStep(n); simClock += n * simU.uDt.value; }
     }
+    // atmosphere: clouds build ahead of the readout, linger through recession
+    const covT = raining ? (rate > 0.5 ? Math.min(0.95, 0.45 + rate / 70) : 0.35) : 0.12;
+    cloudCov += (covT - cloudCov) * Math.min(1, dt / (covT > cloudCov ? 2.2 : 7.0));
+    uCloudU.value = cloudCov;
+    windOff.x += (14 + 90 * cloudCov) * dt;
+    windOff.y -= (8 + 55 * cloudCov) * dt;
+    if (cloudCov > 0.6 && rate > 35 && Math.random() < dt * 0.12) flashV = 1;
+    flashV = Math.max(0, flashV - dt * 3.2);
+    uFlashU.value = flashV * flashV;
+    rainU.uOn.value = rate > 0.2 && cloudCov > 0.4 ? 1 : 0;
+    rainU.uRate.value = rate;
+    bgCol.copy(BG_FAIR).lerp(BG_STORM, cloudCov * 0.85);
+    if (flashV > 0) bgCol.lerp(BG_FLASH, flashV * flashV * 0.35);
+    scene.background = bgCol;
     if (forecastRun && simClock >= (storm.schedule.length + 1) * 3600) finishForecast();
   }
   rainMesh.position.set(controls.target.x, 0, controls.target.z);
@@ -1019,6 +1110,7 @@ addEventListener("resize", () => {
 });
 window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   places, selectPlace, loadForecast, simulateWindow,
+  setSpeed: v => { simRate = v; }, flash: () => { flashV = 1; },
   setRain: v => { raining = v; }, readouts: updateReadouts,
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
