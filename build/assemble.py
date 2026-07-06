@@ -37,6 +37,12 @@ with open(f"{ROOT}/data/payload.json") as f:
 assert "</" not in payload
 html = html.replace('{"__PAYLOAD__":1}', payload)
 
+with open(f"{ROOT}/data/places.json") as f:
+    places = f.read()
+assert "</" not in places
+assert '["__PLACES__"]' in html
+html = html.replace('["__PLACES__"]', places)
+
 out = f"{ROOT}/dist/accra-flood-grid.html"
 with open(out, "w") as f:
     f.write(html)

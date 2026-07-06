@@ -1,6 +1,6 @@
 # Accra // flood grid
 
-An interactive 3D flood simulation of Accra's Odaw basin — **one self-contained HTML file**, no server, no dependencies, works offline. 209,457 real building footprints, the city's mapped drainage network, real terrain, and a GPU shallow-water simulation of the June 29, 2026 storm (~140 mm in 24h, the worst June on record).
+An interactive 3D flood simulation of Accra's Odaw basin — **one self-contained HTML file**, no server, no dependencies, works offline (only the optional live-forecast feature calls the internet). 209,457 real building footprints, the city's mapped drainage network, real terrain, a 210-place gazetteer, and a GPU shallow-water simulation of the June 29, 2026 storm (~140 mm in 24h, the worst June on record).
 
 Open [`dist/accra-flood-grid.html`](dist/accra-flood-grid.html) in any modern browser, press **start storm**, and watch the water obey Accra's actual topography: it pools at Alajo, traces the Odaw corridor through Avenor and Adabraka, and floods Sakumono/Klagon and Mallam — the same neighborhoods in the real June 2026 damage reports. Nobody told the simulation where to flood.
 
@@ -12,6 +12,12 @@ Accra floods every June, and every credible study points to the same causes: a l
 - **Odaw dredged** — the completed-GARID counterfactual
 - **Wetlands restored** — upstream infiltration recovered
 - **Tide at Korle outlet** — compound coastal flooding
+
+And it knows the city by name:
+
+- **210 real places** from the OSM gazetteer, labeled in the 3D scene with declutter and zoom tiers; flood-history areas (Alajo, Kaneshie, Circle, Old Fadama…) carry an orange marker and a short incident note (2015 disaster, June 2026 storms). Labels turn blue live when a place is currently under >0.3 m of simulated water.
+- **Search** any place — the camera flies there and an info card shows what happened, plus live simulation stats: water depth right now, peak this run, ground elevation.
+- **Prediction mode** — one click fetches Accra's real 7-day hourly rain forecast ([Open-Meteo](https://open-meteo.com/), no key), finds the worst 24-hour window, feeds the actual hourly rainfall through the simulation as a hyetograph at 4× speed, and reports a risk verdict with the most-affected neighbourhoods by name. *Indicative only — from this simplified basin model, not an official warning; heed GMet/NADMO advisories.*
 
 ## What the simulation says
 

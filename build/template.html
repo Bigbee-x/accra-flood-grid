@@ -40,12 +40,61 @@
   .legrow { display:flex; justify-content:space-between; color:#7a6f60; font-size:10.5px; }
   .hint { color:#7a6f60; font-size:10.5px; margin-top:8px; line-height:1.5; }
   .note { color:#a09280; font-size:10px; margin-top:6px; line-height:1.45; }
+  #qWrap { position:relative; margin:0 0 10px; }
+  #q { width:100%; box-sizing:border-box; background:#fff; border:1px solid #d8cec0;
+    border-radius:8px; padding:7px 10px; font:12.5px "Helvetica Neue",Helvetica,Arial,sans-serif;
+    color:#2b2620; outline:none; }
+  #q:focus { border-color:#e8590c; }
+  #qRes { position:absolute; top:34px; left:0; right:0; background:#fff; border:1px solid #d8cec0;
+    border-radius:8px; z-index:30; overflow:hidden; box-shadow:0 4px 14px rgba(80,65,45,.18); display:none; }
+  #qRes .qi { padding:6px 10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  #qRes .qi:hover { background:#fdeee0; }
+  #qRes .qi .ty { color:#a09280; font-size:10.5px; margin-left:8px; }
+  .chip { display:inline-block; font-size:10px; border-radius:9px; padding:1px 7px; margin:0 4px 4px 0; }
+  .chip.aff { background:#fdeee0; color:#a13c05; border:1px solid #f0b28a; }
+  .chip.ty { background:#f1ece1; color:#7a6f60; border:1px solid #e0d7c7; }
+  #labels { position:fixed; inset:0; pointer-events:none; z-index:5; overflow:hidden; }
+  .lbl { position:absolute; transform:translate(-50%,-100%); pointer-events:auto; cursor:pointer;
+    font:11px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#5a5044; white-space:nowrap; display:none;
+    text-shadow:0 1px 3px rgba(250,247,240,.95), 0 -1px 3px rgba(250,247,240,.95),
+      1px 0 3px rgba(250,247,240,.95), -1px 0 3px rgba(250,247,240,.95); }
+  .lbl.t0 { text-transform:uppercase; letter-spacing:1px; }
+  .lbl.aff { color:#c44e07; font-weight:600; }
+  .lbl.aff::before { content:""; display:inline-block; width:6px; height:6px; border-radius:3px;
+    background:#e8590c; margin-right:4px; vertical-align:1px; }
+  .lbl.wet { color:#1d6fd1; }
+  .lbl.wet::before { background:#1d6fd1; }
+  #card { position:fixed; top:16px; right:16px; width:272px; z-index:20;
+    background:rgba(252,250,245,.95); border:1px solid #d8cec0; border-radius:12px;
+    box-shadow:0 2px 14px rgba(80,65,45,.16); padding:12px 14px;
+    font:12.5px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#2b2620; display:none; }
+  #card h2 { font-size:14px; margin:0 18px 6px 0; font-weight:600; }
+  #card .x { position:absolute; top:8px; right:11px; cursor:pointer; color:#a09280; font-size:14px; }
+  #card .blurb { color:#4a4238; line-height:1.5; margin:7px 0; }
+  #card .stat { display:flex; justify-content:space-between; margin:2px 0; }
+  .fcBars { display:flex; gap:4px; align-items:flex-end; height:52px; margin:8px 0 2px; }
+  .fcBar { flex:1; background:#c9dcf2; border:1px solid #9dbfe4; border-radius:3px 3px 0 0;
+    cursor:pointer; position:relative; min-height:3px; }
+  .fcBar:hover { background:#a9c8ec; }
+  .fcBar.worst { background:#f2b28a; border-color:#e8590c; }
+  .fcDays { display:flex; gap:4px; font-size:9.5px; color:#7a6f60; text-align:center; }
+  .fcDays div { flex:1; }
+  #fcStatus { font-size:11px; color:#7a6f60; margin-top:4px; line-height:1.45; }
+  #fcOut { font-size:11.5px; line-height:1.55; margin-top:6px; }
+  .risk { font-weight:600; padding:1px 7px; border-radius:9px; font-size:10.5px; }
+  .risk.hi { background:#fbe0d2; color:#a13c05; }
+  .risk.md { background:#faedd2; color:#8a6202; }
+  .risk.lo { background:#e3eedd; color:#3d6b2a; }
 </style>
 </head>
 <body>
 <div id="panel">
   <h1>Accra // flood grid</h1>
   <div class="sub">Odaw basin &middot; storm replay &middot; live water</div>
+  <div id="qWrap">
+    <input id="q" placeholder="Search a place — Alajo, Kaneshie, Circle&hellip;" autocomplete="off">
+    <div id="qRes"></div>
+  </div>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -63,6 +112,18 @@
       <button id="btnRain" class="play">&#9654; start storm</button>
       <button id="btnReset">&#8634; reset</button>
     </div>
+  </div>
+
+  <div class="sec"><div class="t">Forecast &middot; prediction</div>
+    <div class="btns"><button id="fcLoad">Load real 7-day rain forecast</button></div>
+    <div id="fcWrap" style="display:none">
+      <div class="fcBars" id="fcBars"></div>
+      <div class="fcDays" id="fcDays"></div>
+      <div id="fcStatus"></div>
+      <div id="fcOut"></div>
+    </div>
+    <div class="note" id="fcNote" style="display:none">Live data: Open-Meteo. Risk comes from this
+      simplified basin model &mdash; indicative only, not an official warning. Heed GMet / NADMO advisories.</div>
   </div>
 
   <div class="sec"><div class="t">Flooding</div>
@@ -91,6 +152,17 @@
   <div class="hint">drag rotate &middot; right-drag pan &middot; scroll zoom</div>
   <div class="note">Basin-scale explainer, not parcel-level prediction. Terrain: Copernicus GLO-30 (30 m).
   Map data &copy; OpenStreetMap contributors. Shallow-water sim (virtual pipes) on a 43 m grid.</div>
+</div>
+
+<div id="labels"></div>
+<div id="card">
+  <div class="x" id="cardX">&#10005;</div>
+  <h2 id="cardName"></h2>
+  <div id="cardChips"></div>
+  <div class="blurb" id="cardBlurb"></div>
+  <div class="stat"><span class="muted">Water here now</span><span class="val" id="cardNow">–</span></div>
+  <div class="stat"><span class="muted">Peak this run</span><span class="val" id="cardPeak">–</span></div>
+  <div class="stat"><span class="muted">Ground elevation</span><span class="val" id="cardElev">–</span></div>
 </div>
 
 <script>//__THREE__</script>
@@ -291,7 +363,10 @@ function simStep(n) {
 function simReset() {
   runPass(resetPass, depthRT[0]); runPass(resetPass, depthRT[1]);
   runPass(zeroPass, fluxRT[0]); runPass(zeroPass, fluxRT[1]);
-  cur = 0; simClock = 0; updateReadouts(true);
+  cur = 0; simClock = 0;
+  peakFlood = 0; peakBld = 0;
+  for (const p of places) { p.cur = 0; p.peak = 0; }
+  updateReadouts(true);
 }
 
 // ---------- terrain + water meshes (shared flat grid, shader displacement) ----------
@@ -600,23 +675,22 @@ composer.addPass(bloom);
 let bloomOn = false;
 
 // ---------- storm state / UI ----------
-let simClock = 0, raining = false, running = true;
-const storm = { rate: 47, durH: 3.0 }; // mm/h, hours
+let simClock = 0, raining = false, running = true, speedMul = 1;
+const storm = { schedule: [47, 47, 47] }; // mm/h per storm hour (hyetograph)
 const SIM_STEPS = 6, MM_H = 2.7778e-7;
-function setPreset(rate, durH, btn) {
-  storm.rate = rate; storm.durH = durH;
-  document.getElementById("rainSlider").value = rate;
+function setPreset(schedule, btn, sliderVal) {
+  storm.schedule = schedule;
+  if (sliderVal != null) document.getElementById("rainSlider").value = sliderVal;
   for (const id of ["p2015", "p2026", "pCust"])
     document.getElementById(id).classList.toggle("on", id === btn);
 }
 const $ = id => document.getElementById(id);
 $("cBld").textContent = nB.toLocaleString();
 $("cDrn").textContent = waterways.length.toLocaleString();
-$("p2015").onclick = () => setPreset(60, 3.5, "p2015");
-$("p2026").onclick = () => setPreset(47, 3.0, "p2026");
-$("pCust").onclick = () => setPreset(+$("rainSlider").value, 6.0, "pCust");
-$("rainSlider").oninput = e => { storm.rate = +e.target.value; storm.durH = 6.0;
-  setPreset(storm.rate, 6.0, "pCust"); };
+$("p2015").onclick = () => setPreset([60, 60, 60, 30], "p2015", 60);
+$("p2026").onclick = () => setPreset([47, 47, 47], "p2026", 47);
+$("pCust").onclick = () => setPreset(Array(6).fill(+$("rainSlider").value), "pCust");
+$("rainSlider").oninput = e => setPreset(Array(6).fill(+e.target.value), "pCust");
 $("btnRain").onclick = () => {
   raining = !raining;
   $("btnRain").innerHTML = raining ? "&#9646;&#9646; pause storm" : "&#9654; start storm";
@@ -652,10 +726,252 @@ function updateReadouts(force) {
   }
   $("rFlood").textContent = (flooded * CELL * CELL / 1e6).toFixed(1) + " km²";
   $("rBld").textContent = bldWet.toLocaleString();
+  peakFlood = Math.max(peakFlood, flooded * CELL * CELL / 1e6);
+  peakBld = Math.max(peakBld, bldWet);
+  trackPlaces();
   const h = Math.floor(simClock / 3600), mn = Math.floor(simClock % 3600 / 60);
   $("rClock").textContent = "T+" + h + ":" + String(mn).padStart(2, "0");
-  $("rRain").textContent = (raining && simClock < storm.durH * 3600 ?
-    storm.rate : 0) + " mm/h";
+  const hi = Math.floor(simClock / 3600);
+  $("rRain").textContent = (raining && hi < storm.schedule.length ?
+    Math.round(storm.schedule[hi] * 10) / 10 : 0) + " mm/h";
+}
+
+// ---------- places: gazetteer, labels, search, info card ----------
+const PLACES_RAW = ["__PLACES__"];
+const AFFECTED = {
+  "kwame nkrumah circle": { y: "2015 · 2026", b: "Accra's transit heart. On 3 June 2015, floodwater pooling here met a fuel-station fire — over 150 people died in one night. It flooded again on the storm's 11th anniversary in June 2026." },
+  "alajo": { y: "2015 · 2026", b: "Sits where the Odaw meets its Nima and Onyasia tributaries — among the first places under water in nearly every major storm, including 29 June 2026." },
+  "kaneshie": { y: "2026", b: "The market and First Light corridor flood routinely; runoff from the western ridge overwhelms the drains. Submerged in the June 2026 storms." },
+  "odawna": { y: "2015 · 2026", b: "Market quarter on the Odaw channel by Circle. The river overtopped here in June 2026, flooding shops and stranding traders." },
+  "adabraka": { y: "2015 · 2026", b: "Low-lying quarter beside the Odaw floodplain; homes flooded on 3 June 2026 — eleven years to the day after the 2015 disaster." },
+  "avenor": { y: "2026", b: "Odaw corridor community pressed against the channel — every extra half-metre of river finds Avenor first." },
+  "achimota": { y: "2026", b: "Upstream Odaw. Paved-over wetland here sends water downtown faster; flooded 29 June 2026." },
+  "accra new town": { y: "2026", b: "Drains feeding the Odaw back up into these streets when the main channel runs full." },
+  "nima": { y: "2026", b: "The Nima drain, a major Odaw tributary, overflows into dense housing during cloudbursts." },
+  "mamobi": { y: "2026", b: "Shares the overloaded Nima drain; flash floods rise and fall within hours here." },
+  "kotobabi": { y: "2026", b: "Tributary drains through Kotobabi spill when the Odaw backs up downstream." },
+  "old fadama": { y: "chronic", b: "Informal settlement on the Korle Lagoon edge — the most flood-exposed community in Accra, inundated in almost every major rain." },
+  "agbogbloshie": { y: "chronic", b: "Market and scrapyard on the lagoon floodplain, where the Odaw meets Korle Lagoon; water backs up here whenever the outfall chokes." },
+  "korle gonno": { y: "2026", b: "Coastal, beside the lagoon outfall — at high tide the sea can hold the floodwater in." },
+  "chorkor": { y: "2026", b: "Dense coastal community with minimal formal drainage; flooded in the June 2026 storms." },
+  "dansoman": { y: "2026", b: "Flat coastal plain with chronic drainage problems; flooded in the June 2026 storms." },
+  "mallam": { y: "2026", b: "The Mallam junction bowl collects runoff from the Weija hills; flooded June 2026." },
+  "gbawe": { y: "2026", b: "Fast-growing hillside suburb where construction outpaced drainage; flooded June 2026." },
+  "santa maria": { y: "2026", b: "North-western hotspot where unplanned growth left few working drains." },
+  "sowutuom": { y: "2026", b: "Same north-western basin as Santa Maria; streets turn to streams in heavy rain." },
+  "christian village": { y: "2026", b: "Flooded in the June 2026 rains; sits against the Onyasia stream corridor." },
+  "madina": { y: "2026", b: "North-eastern hub; flooded June 2026 — its runoff drains via the Onyasia toward the Odaw." },
+  "legon": { y: "2026", b: "University of Ghana area; parts flooded in the June 2026 rains." },
+  "abeka": { y: "2026", b: "West bank of the Odaw; the Abeka drains surcharge when the river runs high." },
+  "asylum down": { y: "2015 · 2026", b: "Ring-road quarter on the Odaw floodplain, repeatedly flooded in the June storms." },
+  "kokomlemle": { y: "2026", b: "Between the Odaw and the ring road; storm drains here feed straight into the overloaded channel." },
+  "tudu": { y: "2026", b: "Commercial quarter below Kwame Nkrumah Avenue; flooded with the Makola area in June 2026." },
+};
+const TYPE_NAME = ["suburb", "neighbourhood", "locality"];
+let peakFlood = 0, peakBld = 0, selPlace = null, flyTween = null;
+const labelRoot = $("labels");
+const places = PLACES_RAW.map(p => {
+  const gx = Math.min(GN - 1, Math.max(0, p.x / CELL | 0)),
+        gy = Math.min(GN - 1, Math.max(0, p.y / CELL | 0));
+  const aff = AFFECTED[p.n.toLowerCase()] || null;
+  const el = document.createElement("div");
+  el.className = "lbl t" + p.t + (aff ? " aff" : "");
+  el.textContent = p.n;
+  labelRoot.appendChild(el);
+  const g = groundAt(p.x, p.y);
+  const pl = { n: p.n, t: p.t, wx: wx(p.x), wz: wz(p.y), gy: g,
+    cell: gy * GN + gx, aff, el, cur: 0, peak: 0,
+    world: new THREE.Vector3(wx(p.x), g + 30, wz(p.y)) };
+  el.onclick = () => selectPlace(pl);
+  return pl;
+});
+const placesSorted = [...places].sort((a, b) =>
+  (a.aff ? 0 : 1) - (b.aff ? 0 : 1) || a.t - b.t);
+function trackPlaces() {
+  for (const p of places) {
+    let d = 0;
+    const cy = (p.cell / GN) | 0, cx = p.cell % GN;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= GN || y >= GN) continue;
+      const i = y * GN + x;
+      if (maskU8[i] & 3) continue;
+      const v = readBuf[i * 4];
+      if (v > d) d = v;
+    }
+    p.cur = d; if (d > p.peak) p.peak = d;
+    p.el.classList.toggle("wet", d > 0.3);
+  }
+  if (selPlace) refreshCard();
+}
+const V = new THREE.Vector3();
+function updateLabels() {
+  const placed = [];
+  let shown = 0;
+  for (const p of placesSorted) {
+    let ok = shown < 42;
+    if (ok) {
+      const camD = camera.position.distanceTo(p.world);
+      const maxD = p.aff ? 26000 : p.t === 0 ? 20000 : p.t === 1 ? 7000 : 4500;
+      ok = camD < maxD;
+      if (ok) {
+        V.copy(p.world).project(camera);
+        if (V.z > 1 || V.x < -1.05 || V.x > 1.05 || V.y < -1.05 || V.y > 1.05) ok = false;
+        else {
+          const sx = (V.x * 0.5 + 0.5) * innerWidth, sy = (-V.y * 0.5 + 0.5) * innerHeight;
+          for (const q of placed)
+            if (Math.abs(q[0] - sx) < 92 && Math.abs(q[1] - sy) < 20) { ok = false; break; }
+          if (ok) {
+            placed.push([sx, sy]);
+            p.el.style.left = sx + "px"; p.el.style.top = sy + "px";
+          }
+        }
+      }
+    }
+    p.el.style.display = ok ? "block" : "none";
+    if (ok) shown++;
+  }
+}
+const marker = new THREE.Mesh(
+  new THREE.RingGeometry(70, 84, 48),
+  new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.85,
+    side: THREE.DoubleSide, depthWrite: false }));
+marker.rotation.x = -Math.PI / 2; marker.visible = false; marker.renderOrder = 5;
+scene.add(marker);
+function selectPlace(p) {
+  selPlace = p;
+  marker.position.set(p.wx, p.gy + 2, p.wz); marker.visible = true;
+  $("cardName").textContent = p.n;
+  $("cardChips").innerHTML =
+    `<span class="chip ty">${TYPE_NAME[p.t]}</span>` +
+    (p.aff ? `<span class="chip aff">flooded ${p.aff.y}</span>` : "");
+  $("cardBlurb").textContent = p.aff ? p.aff.b :
+    "No major incident on record here in this dataset — start a storm and watch how it fares.";
+  $("cardElev").textContent = p.gy.toFixed(0) + " m";
+  refreshCard();
+  $("card").style.display = "block";
+  const dir = camera.position.clone().sub(controls.target);
+  const dist = Math.min(Math.max(dir.length(), 1400), 3200);
+  dir.normalize();
+  const toT = new THREE.Vector3(p.wx, 0, p.wz);
+  const toP = toT.clone().add(dir.multiplyScalar(dist));
+  toP.y = Math.max(toP.y, 650);
+  flyTween = { t0: uTime.value, dur: 1.1, fromT: controls.target.clone(),
+    toT, fromP: camera.position.clone(), toP };
+}
+function refreshCard() {
+  if (!selPlace) return;
+  $("cardNow").textContent = selPlace.cur > 0.05 ? selPlace.cur.toFixed(2) + " m" : "dry";
+  $("cardNow").className = "val" + (selPlace.cur > 0.3 ? " danger" : "");
+  $("cardPeak").textContent = selPlace.peak > 0.05 ? selPlace.peak.toFixed(2) + " m" : "–";
+}
+$("cardX").onclick = () => {
+  $("card").style.display = "none"; selPlace = null; marker.visible = false; };
+renderer.domElement.addEventListener("pointerdown", () => { flyTween = null; });
+const qEl = $("q"), qRes = $("qRes");
+function runSearch() {
+  const v = qEl.value.trim().toLowerCase();
+  if (v.length < 2) { qRes.style.display = "none"; return; }
+  const hits = places.filter(p => p.n.toLowerCase().includes(v))
+    .sort((a, b) =>
+      (b.n.toLowerCase().startsWith(v) ? 1 : 0) - (a.n.toLowerCase().startsWith(v) ? 1 : 0) ||
+      (a.aff ? 0 : 1) - (b.aff ? 0 : 1) || a.t - b.t).slice(0, 8);
+  qRes.innerHTML = "";
+  for (const p of hits) {
+    const d = document.createElement("div");
+    d.className = "qi";
+    d.innerHTML = `<span>${p.n}${p.aff ? ' <span style="color:#e8590c">&#9679;</span>' : ""}</span>` +
+      `<span class="ty">${TYPE_NAME[p.t]}</span>`;
+    d.onclick = () => { qRes.style.display = "none"; qEl.value = p.n; selectPlace(p); };
+    qRes.appendChild(d);
+  }
+  qRes.style.display = hits.length ? "block" : "none";
+}
+qEl.oninput = runSearch;
+qEl.onkeydown = e => {
+  if (e.key === "Enter" && qRes.firstChild) qRes.firstChild.onclick();
+  if (e.key === "Escape") { qRes.style.display = "none"; qEl.blur(); }
+};
+
+// ---------- forecast engine (Open-Meteo) ----------
+let forecast = null, forecastRun = false, fcWorst = 0;
+const FC_URL = "https://api.open-meteo.com/v1/forecast?latitude=5.588&longitude=-0.215" +
+  "&hourly=precipitation&forecast_days=7&timezone=Africa%2FAccra";
+$("fcLoad").onclick = () => forecast ? simulateWindow(fcWorst) : loadForecast();
+async function loadForecast() {
+  $("fcLoad").textContent = "Fetching Open-Meteo…";
+  try {
+    const r = await fetch(FC_URL);
+    const j = await r.json();
+    forecast = { time: j.hourly.time,
+      mm: j.hourly.precipitation.map(v => Math.max(0, v || 0)) };
+  } catch (err) {
+    $("fcLoad").textContent = "Load real 7-day rain forecast";
+    $("fcWrap").style.display = "block";
+    $("fcStatus").textContent =
+      "Couldn't reach Open-Meteo — check connection. Storm presets above still work offline.";
+    return;
+  }
+  let best = 0, bestSum = -1, run = 0;
+  for (let i = 0; i < forecast.mm.length; i++) {
+    run += forecast.mm[i];
+    if (i >= 24) run -= forecast.mm[i - 24];
+    if (i >= 23 && run > bestSum) { bestSum = run; best = i - 23; }
+  }
+  fcWorst = best;
+  const days = [];
+  for (let d = 0; d < 7; d++)
+    days.push(forecast.mm.slice(d * 24, d * 24 + 24).reduce((a, b) => a + b, 0));
+  const maxMm = Math.max(...days, 1);
+  const bars = $("fcBars"), names = $("fcDays");
+  bars.innerHTML = ""; names.innerHTML = "";
+  const worstDay = Math.min(Math.floor((fcWorst + 12) / 24), 6);
+  days.forEach((mm, d) => {
+    const b = document.createElement("div");
+    b.className = "fcBar" + (d === worstDay ? " worst" : "");
+    b.style.height = Math.max(6, mm / maxMm * 100) + "%";
+    b.title = mm.toFixed(1) + " mm";
+    b.onclick = () => simulateWindow(d * 24);
+    bars.appendChild(b);
+    const lab = document.createElement("div");
+    lab.textContent = new Date(forecast.time[d * 24])
+      .toLocaleDateString("en-GB", { weekday: "short" });
+    names.appendChild(lab);
+  });
+  $("fcWrap").style.display = "block"; $("fcNote").style.display = "block";
+  const wd = new Date(forecast.time[fcWorst])
+    .toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+  $("fcStatus").innerHTML =
+    `7-day total ${days.reduce((a, b) => a + b, 0).toFixed(0)} mm. ` +
+    `Worst 24 h: ${wd}, ${bestSum.toFixed(0)} mm. Click a day to simulate it.`;
+  $("fcLoad").innerHTML = "&#9654; simulate worst 24 h";
+  $("fcOut").innerHTML = "";
+}
+function simulateWindow(startIdx) {
+  if (!forecast) return;
+  setPreset(forecast.mm.slice(startIdx, startIdx + 24), null);
+  simReset();
+  raining = true; forecastRun = true; speedMul = 4;
+  $("btnRain").innerHTML = "&#9646;&#9646; pause storm";
+  $("btnRain").classList.add("on");
+  const wd = new Date(forecast.time[startIdx])
+    .toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+  const tot = storm.schedule.reduce((a, b) => a + b, 0);
+  $("fcOut").innerHTML =
+    `Simulating ${wd}: ${tot.toFixed(0)} mm over 24 h at 4&times; speed&hellip;`;
+}
+function finishForecast() {
+  forecastRun = false; speedMul = 1;
+  const risk = peakFlood >= 6 ? ["hi", "HIGH"] :
+    peakFlood >= 2.5 ? ["md", "MODERATE"] : ["lo", "LOW"];
+  const hot = places.filter(p => p.peak > 0.3 && (p.aff || p.t === 0))
+    .sort((a, b) => b.peak - a.peak).slice(0, 4)
+    .map(p => `${p.n} ${p.peak.toFixed(1)} m`).join(" &middot; ");
+  $("fcOut").innerHTML =
+    `<span class="risk ${risk[0]}">${risk[1]} risk</span> ` +
+    `peak ${peakFlood.toFixed(1)} km&sup2; flooded &middot; ` +
+    `${peakBld.toLocaleString()} buildings in water` +
+    (hot ? `<br>Hotspots: ${hot}` : "<br>No neighbourhood exceeded 0.3 m in this run.");
 }
 
 // ---------- animate ----------
@@ -669,15 +985,27 @@ function animate() {
   uCam.value.copy(camera.position);
   controls.update();
   if (running) {
-    const active = raining && simClock < storm.durH * 3600;
-    simU.uRain.value = active ? storm.rate * MM_H : 0;
-    rainU.uOn.value = active ? 1 : 0;
+    const hi = Math.floor(simClock / 3600);
+    const active = raining && hi < storm.schedule.length;
+    const rate = active ? storm.schedule[hi] : 0;
+    simU.uRain.value = rate * MM_H;
+    rainU.uOn.value = rate > 0.2 ? 1 : 0;
     if (raining) {
-      simStep(SIM_STEPS);
-      simClock += SIM_STEPS * simU.uDt.value; // physical storm seconds
+      simStep(SIM_STEPS * speedMul);
+      simClock += SIM_STEPS * speedMul * simU.uDt.value; // physical storm seconds
     }
+    if (forecastRun && simClock >= (storm.schedule.length + 1) * 3600) finishForecast();
   }
   rainMesh.position.set(controls.target.x, 0, controls.target.z);
+  if (flyTween) {
+    const k = Math.min((uTime.value - flyTween.t0) / flyTween.dur, 1);
+    const e = k * k * (3 - 2 * k);
+    controls.target.lerpVectors(flyTween.fromT, flyTween.toT, e);
+    camera.position.lerpVectors(flyTween.fromP, flyTween.toP, e);
+    if (k >= 1) flyTween = null;
+  }
+  if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
+  if (frame % 2 === 0) updateLabels();
   waterU.uDepth.value = depthRT[cur].texture;
   waterU.uFlux.value = fluxRT[cur].texture;
   bldU.uDepth.value = depthRT[cur].texture;
@@ -690,6 +1018,7 @@ addEventListener("resize", () => {
   composer.setSize(innerWidth, innerHeight);
 });
 window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
+  places, selectPlace, loadForecast, simulateWindow,
   setRain: v => { raining = v; }, readouts: updateReadouts,
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
