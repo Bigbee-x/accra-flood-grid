@@ -9,12 +9,17 @@
   canvas { display:block; }
   #panel {
     position:fixed; top:16px; left:16px; width:300px; z-index:10;
+    max-height:calc(100vh - 32px); overflow-y:auto; overflow-x:hidden;
     background:rgba(252,250,245,.92); border:1px solid #d8cec0; border-radius:12px;
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
     box-shadow:0 2px 14px rgba(80,65,45,.14);
     font:13px "Helvetica Neue", Helvetica, Arial, sans-serif; color:#2b2620;
     padding:14px 16px 12px; user-select:none;
   }
+  #panel::-webkit-scrollbar { width:8px; }
+  #panel::-webkit-scrollbar-thumb { background:#dcd3c4; border-radius:4px; }
+  #tl { width:100%; height:64px; display:block; cursor:ew-resize; border-radius:6px;
+    background:#f6f1e7; border:1px solid #e4dccd; touch-action:none; }
   #panel h1 { font-size:15px; margin:0 0 2px; font-weight:600; letter-spacing:.3px; color:#1f1b16; }
   #panel .sub { color:#7a6f60; font-size:11.5px; margin-bottom:10px; }
   .row { display:flex; justify-content:space-between; align-items:center; margin:3px 0; }
@@ -136,6 +141,18 @@
     <div class="row"><span class="muted">Buildings in water</span><span class="big danger" id="rBld">0</span></div>
     <div class="legend"></div>
     <div class="legrow"><span>0.1 m</span><span>water depth</span><span>3 m+</span></div>
+  </div>
+
+  <div class="sec"><div class="t">Storm timeline</div>
+    <canvas id="tl"></canvas>
+    <div class="row" style="margin-top:5px">
+      <span class="val" id="tlTime">T+0:00</span>
+      <span class="btns" style="flex:0 0 140px; margin:0">
+        <button id="tlReplay">&#9654; replay</button>
+        <button id="tlLive" class="on">live</button>
+      </span>
+    </div>
+    <div class="note">Drag to scrub the flood through time &middot; rainfall bars, flooded-area line.</div>
   </div>
 
   <div class="sec"><div class="t">Interventions</div>
@@ -382,6 +399,7 @@ function simReset() {
   cur = 0; simClock = 0;
   peakFlood = 0; peakBld = 0;
   for (const p of places) { p.cur = 0; p.peak = 0; }
+  if (typeof clearTimeline === "function") { clearTimeline(); captureSnap(); }
   updateReadouts(true);
 }
 
@@ -762,6 +780,7 @@ $("p2026").onclick = () => setPreset([47, 47, 47], "p2026", 47);
 $("pCust").onclick = () => setPreset(Array(6).fill(+$("rainSlider").value), "pCust");
 $("rainSlider").oninput = e => setPreset(Array(6).fill(+e.target.value), "pCust");
 $("btnRain").onclick = () => {
+  if (reviewMode) { reviewMode = false; replayAnim = null; $("tlLive").classList.add("on"); }
   raining = !raining;
   $("btnRain").innerHTML = raining ? "&#9646;&#9646; pause storm" : "&#9654; start storm";
   $("btnRain").classList.toggle("on", raining);
@@ -798,16 +817,21 @@ function updateReadouts(force) {
     const c = bCell[i];
     if (!(maskU8[c] & 3) && convU8[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
   }
-  $("rFlood").textContent = (flooded * CELL * CELL / 1e6).toFixed(1) + " km²";
+  const floodKm2 = flooded * CELL * CELL / 1e6;
+  $("rFlood").textContent = floodKm2.toFixed(1) + " km²";
   $("rBld").textContent = bldWet.toLocaleString();
-  peakFlood = Math.max(peakFlood, flooded * CELL * CELL / 1e6);
+  peakFlood = Math.max(peakFlood, floodKm2);
   peakBld = Math.max(peakBld, bldWet);
   trackPlaces();
-  const h = Math.floor(simClock / 3600), mn = Math.floor(simClock % 3600 / 60);
-  $("rClock").textContent = "T+" + h + ":" + String(mn).padStart(2, "0");
   const hi = Math.floor(simClock / 3600);
-  $("rRain").textContent = (raining && hi < storm.schedule.length ?
-    Math.round(storm.schedule[hi] * 10) / 10 : 0) + " mm/h";
+  const rate = raining && hi < storm.schedule.length ? storm.schedule[hi] : 0;
+  $("rClock").textContent = clockStr(simClock);
+  $("tlTime").textContent = clockStr(simClock);
+  $("rRain").textContent = (Math.round(rate * 10) / 10) + " mm/h";
+  if (simClock > lastSeriesT + 30 || force) {
+    series.push({ t: simClock, rain: rate, flood: floodKm2, bld: bldWet });
+    lastSeriesT = simClock;
+  }
 }
 
 // ---------- places: gazetteer, labels, search, info card ----------
@@ -1049,7 +1073,132 @@ function finishForecast() {
     (hot ? `<br>Hotspots: ${hot}` : "<br>No neighbourhood exceeded 0.3 m in this run.");
 }
 
+// ---------- storm timeline: hydrograph recording + scrubber ----------
+const MAXSNAP = 96, SNAP_INT = 150; // capture depth every 150 sim-seconds (2.5 min)
+const snaps = [];            // { t, tex, rt }
+const series = [];           // { t, rain, flood, bld }
+let lastSnapT = -1, lastSeriesT = -1;
+let reviewMode = false, reviewT = 0, reviewDepth = null, replayAnim = null;
+const zeroFlux = new THREE.DataTexture(new Float32Array(4), 1, 1,
+  THREE.RGBAFormat, THREE.FloatType);
+zeroFlux.needsUpdate = true;
+const copyPass = simPass(
+  "uniform sampler2D uSrc; varying vec2 vUv; void main(){ gl_FragColor = texture2D(uSrc, vUv); }",
+  { uSrc: { value: null } });
+function makeSnapRT() {
+  return new THREE.WebGLRenderTarget(256, 256, {
+    format: THREE.RGBAFormat, type: THREE.HalfFloatType,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    depthBuffer: false, stencilBuffer: false });
+}
+function captureSnap() {
+  if (snaps.length >= MAXSNAP) return;
+  const rt = makeSnapRT();
+  copyPass.mat.uniforms.uSrc.value = depthRT[cur].texture;
+  runPass(copyPass, rt);
+  snaps.push({ t: simClock, tex: rt.texture, rt });
+}
+function clearTimeline() {
+  for (const s of snaps) s.rt.dispose();
+  snaps.length = 0; series.length = 0;
+  lastSnapT = -1; lastSeriesT = -1;
+  reviewMode = false; reviewDepth = null; replayAnim = null;
+  if (tlLiveBtn) tlLiveBtn.classList.add("on");
+}
+const tl = $("tl"), tctx = tl.getContext("2d"), tlLiveBtn = $("tlLive");
+let tlW = 268, tlH = 64;
+function sizeTL() {
+  const dpr = Math.min(devicePixelRatio, 2);
+  tlW = tl.clientWidth || 268;
+  tl.width = tlW * dpr; tl.height = tlH * dpr;
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function tlWindow() { return (storm.schedule.length + 3) * 3600; }
+function drawTL() {
+  const W = tlW, H = tlH, pad = 3, win = tlWindow();
+  tctx.clearRect(0, 0, W, H);
+  const xOf = t => pad + (t / win) * (W - 2 * pad);
+  const maxRain = Math.max(1, ...storm.schedule);
+  const hw = xOf(3600) - xOf(0);
+  tctx.fillStyle = "#cfe0f4";
+  for (let h = 0; h < storm.schedule.length; h++) {
+    const r = storm.schedule[h]; if (r <= 0.05) continue;
+    const bh = (r / maxRain) * (H * 0.46);
+    tctx.fillRect(xOf(h * 3600), 3, Math.max(1, hw - 1), bh);
+  }
+  const maxF = Math.max(6, ...series.map(s => s.flood));
+  if (series.length > 1) {
+    tctx.beginPath(); tctx.strokeStyle = "#1d6fd1"; tctx.lineWidth = 1.6;
+    series.forEach((s, i) => {
+      const px = xOf(s.t), py = H - 3 - (s.flood / maxF) * (H - 8);
+      i ? tctx.lineTo(px, py) : tctx.moveTo(px, py);
+    });
+    tctx.stroke();
+    tctx.lineTo(xOf(series[series.length - 1].t), H - 3);
+    tctx.lineTo(xOf(series[0].t), H - 3); tctx.closePath();
+    tctx.fillStyle = "rgba(29,111,209,.12)"; tctx.fill();
+  }
+  const pt = Math.min(reviewMode ? reviewT : simClock, win);
+  const phx = xOf(pt);
+  tctx.strokeStyle = "#e8590c"; tctx.lineWidth = 1.5;
+  tctx.beginPath(); tctx.moveTo(phx, 0); tctx.lineTo(phx, H); tctx.stroke();
+  tctx.fillStyle = "#e8590c";
+  tctx.beginPath(); tctx.arc(phx, 4, 3, 0, 6.29); tctx.fill();
+}
+function nearest(arr, t) {
+  let best = arr[0], bd = 1e18;
+  for (const s of arr) { const d = Math.abs(s.t - t); if (d < bd) { bd = d; best = s; } }
+  return best;
+}
+function clockStr(t) {
+  const h = Math.floor(t / 3600), mn = Math.floor(t % 3600 / 60);
+  return "T+" + h + ":" + String(mn).padStart(2, "0");
+}
+function applyReview() {
+  if (!snaps.length) return;
+  reviewDepth = nearest(snaps, reviewT).tex;
+  const ser = series.length ? nearest(series, reviewT) : null;
+  const rain = ser ? ser.rain : 0;
+  const cov = rain > 0.5 ? Math.min(0.95, 0.45 + rain / 70) : 0.12;
+  uCloudU.value = cov;
+  bgCol.copy(BG_FAIR).lerp(BG_STORM, cov * 0.85); scene.background = bgCol;
+  rainU.uOn.value = rain > 0.2 && cov > 0.4 ? 1 : 0; rainU.uRate.value = rain;
+  if (ser) {
+    $("rFlood").textContent = ser.flood.toFixed(1) + " km²";
+    $("rBld").textContent = Math.round(ser.bld).toLocaleString();
+  }
+  $("rClock").textContent = clockStr(reviewT);
+  $("tlTime").textContent = clockStr(reviewT);
+}
+function enterReview() {
+  if (!snaps.length) return;
+  reviewMode = true; replayAnim = null; tlLiveBtn.classList.remove("on");
+}
+function tlSeek(clientX) {
+  enterReview(); if (!reviewMode) return;
+  const rect = tl.getBoundingClientRect();
+  reviewT = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) * tlWindow();
+  applyReview();
+}
+tl.addEventListener("pointerdown", e => {
+  tlSeek(e.clientX); tl.setPointerCapture(e.pointerId);
+  const mv = ev => tlSeek(ev.clientX);
+  const up = () => { tl.removeEventListener("pointermove", mv);
+    tl.removeEventListener("pointerup", up); };
+  tl.addEventListener("pointermove", mv); tl.addEventListener("pointerup", up);
+});
+tlLiveBtn.onclick = () => {
+  reviewMode = false; replayAnim = null; tlLiveBtn.classList.add("on");
+  $("tlTime").textContent = clockStr(simClock);
+};
+$("tlReplay").onclick = () => {
+  if (!snaps.length) return;
+  enterReview();
+  replayAnim = { from: 0, to: snaps[snaps.length - 1].t, t0: uTime.value, dur: 7 };
+};
+
 // ---------- animate ----------
+sizeTL();
 simReset();
 const clock = new THREE.Clock();
 let frame = 0;
@@ -1059,7 +1208,7 @@ function animate() {
   uTime.value += dt;
   uCam.value.copy(camera.position);
   controls.update();
-  if (running) {
+  if (running && !reviewMode) {
     const hi = Math.floor(simClock / 3600);
     const active = raining && hi < storm.schedule.length;
     const rate = active ? storm.schedule[hi] : 0;
@@ -1069,7 +1218,11 @@ function animate() {
       if (stepCarry > 120) stepCarry = 120; // drop backlog after tab throttling
       const n = Math.floor(stepCarry);
       stepCarry -= n;
-      if (n > 0) { simStep(n); simClock += n * simU.uDt.value; }
+      if (n > 0) {
+        simStep(n); simClock += n * simU.uDt.value;
+        const snapInt = Math.max(SNAP_INT, tlWindow() / MAXSNAP);
+        if (simClock >= lastSnapT + snapInt) { captureSnap(); lastSnapT = simClock; }
+      }
     }
     // atmosphere: clouds build ahead of the readout, linger through recession
     const covT = raining ? (rate > 0.5 ? Math.min(0.95, 0.45 + rate / 70) : 0.35) : 0.12;
@@ -1096,22 +1249,39 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
+  if (replayAnim) {
+    const k = (uTime.value - replayAnim.t0) / replayAnim.dur;
+    reviewT = replayAnim.from + (replayAnim.to - replayAnim.from) * Math.min(1, k);
+    applyReview();
+    if (k >= 1) { replayAnim = null; }
+  }
   if (frame % 2 === 0) updateLabels();
-  waterU.uDepth.value = depthRT[cur].texture;
-  waterU.uFlux.value = fluxRT[cur].texture;
-  bldU.uDepth.value = depthRT[cur].texture;
-  if (++frame % 45 === 0) updateReadouts();
+  if (frame % 3 === 0) drawTL();
+  if (reviewMode && reviewDepth) {
+    waterU.uDepth.value = reviewDepth; waterU.uFlux.value = zeroFlux;
+    bldU.uDepth.value = reviewDepth;
+  } else {
+    waterU.uDepth.value = depthRT[cur].texture;
+    waterU.uFlux.value = fluxRT[cur].texture;
+    bldU.uDepth.value = depthRT[cur].texture;
+  }
+  if (++frame % 45 === 0 && !reviewMode) updateReadouts();
   if (bloomOn) composer.render(); else renderer.render(scene, camera);
 }
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
+  sizeTL();
 });
 window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   places, selectPlace, loadForecast, simulateWindow,
   setSpeed: v => { simRate = v; }, flash: () => { flashV = 1; },
   setRain: v => { raining = v; }, readouts: updateReadouts,
+  tl: () => ({ snaps: snaps.length, series: series.length, review: reviewMode,
+    reviewT, simClock, window: tlWindow() }),
+  seek: t => { reviewT = t; enterReview(); applyReview(); },
+  goLive: () => { reviewMode = false; replayAnim = null; tlLiveBtn.classList.add("on"); },
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
     const i = gy * GN + gx;

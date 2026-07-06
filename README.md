@@ -17,7 +17,8 @@ And it knows the city by name:
 
 - **210 real places** from the OSM gazetteer, labeled in the 3D scene with declutter and zoom tiers; flood-history areas (Alajo, Kaneshie, Circle, Old Fadama…) carry an orange marker and a short incident note (2015 disaster, June 2026 storms). Labels turn blue live when a place is currently under >0.3 m of simulated water.
 - **Search** any place — the camera flies there and an info card shows what happened, plus live simulation stats: water depth right now, peak this run, ground elevation.
-- **Prediction mode** — one click fetches Accra's real 7-day hourly rain forecast ([Open-Meteo](https://open-meteo.com/), no key), finds the worst 24-hour window, feeds the actual hourly rainfall through the simulation as a hyetograph at 4× speed, and reports a risk verdict with the most-affected neighbourhoods by name. *Indicative only — from this simplified basin model, not an official warning; heed GMet/NADMO advisories.*
+- **Prediction mode** — one click fetches Accra's real 7-day hourly rain forecast ([Open-Meteo](https://open-meteo.com/), no key), finds the worst 24-hour window, feeds the actual hourly rainfall through the simulation as a hyetograph, and reports a risk verdict with the most-affected neighbourhoods by name. *Indicative only — from this simplified basin model, not an official warning; heed GMet/NADMO advisories.*
+- **Storm timeline** — the run is recorded as GPU depth-texture snapshots and a live hydrograph (rainfall bars + flooded-area curve). Grab the playhead and scrub back and forth through the flood, watch it rise and recede, or hit replay to play the whole event back as a movie. Turns a one-shot animation into an explorable flood record.
 
 ## What the simulation says
 
