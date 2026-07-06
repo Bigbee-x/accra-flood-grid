@@ -1,0 +1,12 @@
+# raw data — re-downloadable via the pipeline (see README)
+data/ghana-latest.osm.pbf
+data/cop30_N05_W001.tif
+data/*.jsonl
+data/payload.json
+
+# npm artifacts fetched by the build
+build/*.tgz
+build/three-pkg/
+build/earcut-pkg/
+
+.DS_Store

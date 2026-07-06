@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accra // flood grid</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#07090c; height:100%; }
+  canvas { display:block; }
+  #panel {
+    position:fixed; top:16px; left:16px; width:300px; z-index:10;
+    background:rgba(13,16,21,.87); border:1px solid #232a35; border-radius:12px;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    font:13px "Helvetica Neue", Helvetica, Arial, sans-serif; color:#e8ebef;
+    padding:14px 16px 12px; user-select:none;
+  }
+  #panel h1 { font-size:15px; margin:0 0 2px; font-weight:600; letter-spacing:.3px; }
+  #panel .sub { color:#8b95a3; font-size:11.5px; margin-bottom:10px; }
+  .row { display:flex; justify-content:space-between; align-items:center; margin:3px 0; }
+  .muted { color:#8b95a3; }
+  .val { color:#e8ebef; font-variant-numeric:tabular-nums; }
+  .big { font-size:16px; font-weight:600; color:#37e0ff; font-variant-numeric:tabular-nums; }
+  .danger { color:#ff2d95; }
+  .sec { border-top:1px solid #232a35; margin:10px -16px 0; padding:8px 16px 0; }
+  .sec .t { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#8b95a3; margin-bottom:6px; }
+  .btns { display:flex; gap:6px; margin:6px 0; }
+  button {
+    flex:1; background:#161b24; color:#cdd5df; border:1px solid #2a3341; border-radius:7px;
+    font:11.5px "Helvetica Neue", Helvetica, Arial, sans-serif; padding:5px 4px; cursor:pointer;
+  }
+  button:hover { border-color:#ff2d95; }
+  button.on { background:#2a1220; border-color:#ff2d95; color:#ff8cc4; }
+  button.play { font-weight:600; }
+  input[type=range] { width:110px; accent-color:#ff2d95; height:14px; }
+  input[type=checkbox] { accent-color:#ff2d95; }
+  label.chk { display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer; }
+  .legend { height:8px; border-radius:4px; margin:6px 0 2px;
+    background:linear-gradient(90deg,#0d3550 0%,#1899b3 30%,#1257a0 60%,#26336e 80%,#ff2d95 100%); }
+  .legrow { display:flex; justify-content:space-between; color:#8b95a3; font-size:10.5px; }
+  .hint { color:#8b95a3; font-size:10.5px; margin-top:8px; line-height:1.5; }
+  .note { color:#5f6a78; font-size:10px; margin-top:6px; line-height:1.45; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>Accra // flood grid</h1>
+  <div class="sub">Odaw basin &middot; storm replay &middot; night grid</div>
+  <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
+  <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
+
+  <div class="sec"><div class="t">Storm</div>
+    <div class="btns">
+      <button id="p2015">Jun 3 2015</button>
+      <button id="p2026" class="on">Jun 29 2026</button>
+      <button id="pCust">Custom</button>
+    </div>
+    <div class="row"><span class="muted">Rain intensity</span>
+      <input type="range" id="rainSlider" min="0" max="120" value="47" step="1"></div>
+    <div class="row"><span class="muted">Storm clock</span><span class="big" id="rClock">T+0:00</span></div>
+    <div class="row"><span class="muted">Raining now</span><span class="val" id="rRain">0 mm/h</span></div>
+    <div class="btns">
+      <button id="btnRain" class="play">&#9654; start storm</button>
+      <button id="btnReset">&#8634; reset</button>
+    </div>
+  </div>
+
+  <div class="sec"><div class="t">Flooding</div>
+    <div class="row"><span class="muted">Flooded area</span><span class="big" id="rFlood">0.0 km&sup2;</span></div>
+    <div class="row"><span class="muted">Buildings in water</span><span class="big danger" id="rBld">0</span></div>
+    <div class="legend"></div>
+    <div class="legrow"><span>0.1 m</span><span>water depth</span><span>3 m+</span></div>
+  </div>
+
+  <div class="sec"><div class="t">Interventions</div>
+    <div class="row"><span class="muted">Drains: clogged &rarr; clear</span>
+      <input type="range" id="drainSlider" min="0" max="100" value="18"></div>
+    <label class="chk"><input type="checkbox" id="odawChk"> Odaw dredged <span class="muted">(GARID done)</span></label>
+    <label class="chk"><input type="checkbox" id="wetChk"> Wetlands restored</label>
+    <div class="row"><span class="muted">Tide at Korle outlet</span>
+      <input type="range" id="tideSlider" min="0" max="150" value="30"></div>
+  </div>
+
+  <div class="sec"><div class="t">Look</div>
+    <label class="chk"><input type="checkbox" id="bloomChk" checked> Bloom glow</label>
+    <label class="chk"><input type="checkbox" id="scanChk" checked> Floor scanlines</label>
+    <label class="chk"><input type="checkbox" id="pulseChk"> City pulse</label>
+    <div class="row"><span class="muted">Building density</span>
+      <input type="range" id="densSlider" min="10" max="100" value="100"></div>
+  </div>
+
+  <div class="hint">drag rotate &middot; right-drag pan &middot; scroll zoom</div>
+  <div class="note">Basin-scale explainer, not parcel-level prediction. Terrain: Copernicus GLO-30 (30 m).
+  Map data &copy; OpenStreetMap contributors. Shallow-water sim (virtual pipes) on a 43 m grid.</div>
+</div>
+
+<script>//__THREE__</script>
+<script>//__ORBIT__</script>
+<script>//__PASS__</script>
+<script>//__EFFECTCOMPOSER__</script>
+<script>//__RENDERPASS__</script>
+<script>//__SHADERPASS__</script>
+<script>//__COPYSHADER__</script>
+<script>//__LUMSHADER__</script>
+<script>//__BLOOMPASS__</script>
+<script>//__EARCUT__</script>
+<script>const P = {"__PAYLOAD__":1};</script>
+<script>
+"use strict";
+// ---------- payload decode ----------
+function b64(s, T) {
+  const bin = atob(s), n = bin.length, u8 = new Uint8Array(n);
+  for (let i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+  return new T(u8.buffer);
+}
+const M = P.meta, GN = M.grid.n, CELL = M.grid.cell, SPAN = GN * CELL, INV = 1 / M.scale;
+const bLen = b64(P.bLen, Uint16Array), bStart = b64(P.bStart, Int32Array),
+      bDelta = b64(P.bDelta, Int16Array), bH = b64(P.bH, Float32Array),
+      rLen = b64(P.rLen, Uint16Array), rStart = b64(P.rStart, Int32Array),
+      rDelta = b64(P.rDelta, Int16Array), rClass = b64(P.rClass, Uint8Array),
+      wLen = b64(P.wLen, Uint16Array), wStart = b64(P.wStart, Int32Array),
+      wDelta = b64(P.wDelta, Int16Array), wClass = b64(P.wClass, Uint8Array),
+      elevU16 = b64(P.elev, Uint16Array), convU8 = b64(P.conv, Uint8Array),
+      maskU8 = b64(P.mask, Uint8Array), densU8 = b64(P.dens, Uint8Array);
+const elev = new Float32Array(GN * GN);
+for (let i = 0; i < elev.length; i++) elev[i] = elevU16[i] * M.grid.elev_scale + M.grid.elev_off;
+
+function groundAt(mx, my) { // bilinear, mx/my in meters from origin
+  const gx = Math.min(Math.max(mx / CELL - 0.5, 0), GN - 1.001),
+        gy = Math.min(Math.max(my / CELL - 0.5, 0), GN - 1.001);
+  const x0 = gx | 0, y0 = gy | 0, fx = gx - x0, fy = gy - y0;
+  const a = elev[y0 * GN + x0], b = elev[y0 * GN + x0 + 1],
+        c = elev[(y0 + 1) * GN + x0], d = elev[(y0 + 1) * GN + x0 + 1];
+  return a + (b - a) * fx + (c + (d - c) * fx - (a + (b - a) * fx)) * fy;
+}
+// decode a polyline layer into arrays of Float32 [mx,my,...] per item
+function decodeLines(lens, starts, deltas) {
+  const items = new Array(lens.length);
+  let s = 0, d = 0;
+  for (let i = 0; i < lens.length; i++) {
+    const n = lens[i], pts = new Float32Array(n * 2);
+    let x = starts[s], y = starts[s + 1]; s += 2;
+    pts[0] = x * INV; pts[1] = y * INV;
+    for (let j = 1; j < n; j++) {
+      x += deltas[d]; y += deltas[d + 1]; d += 2;
+      pts[j * 2] = x * INV; pts[j * 2 + 1] = y * INV;
+    }
+    items[i] = pts;
+  }
+  return items;
+}
+const HALF = SPAN / 2;
+const wx = mx => mx - HALF, wz = my => HALF - my; // world coords
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07090c);
+scene.fog = new THREE.Fog(0x07090c, 9000, 34000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 10, 80000);
+camera.position.set(700, 2400, 11800);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;
+controls.minDistance = 120; controls.maxDistance = 34000;
+controls.target.set(1200, 0, 5200); // Kwame Nkrumah Circle / lower Odaw
+
+// ---------- shared sim uniforms ----------
+const texel = 1 / GN;
+const uTime = { value: 0 }, uCam = { value: new THREE.Vector3() },
+      uScan = { value: 1 }, uPulse = { value: 0 }, uSpanU = { value: SPAN };
+
+// terrain elevation texture (R32F, texel-aligned with grid mesh)
+const terrTex = new THREE.DataTexture(elev, GN, GN, THREE.RedFormat, THREE.FloatType);
+terrTex.needsUpdate = true; terrTex.minFilter = terrTex.magFilter = THREE.NearestFilter;
+// aux texture: R = conveyance, G = mask bits
+const auxData = new Uint8Array(GN * GN * 4);
+for (let i = 0; i < GN * GN; i++) {
+  auxData[i * 4] = convU8[i]; auxData[i * 4 + 1] = maskU8[i];
+  auxData[i * 4 + 2] = densU8[i];
+}
+const auxTex = new THREE.DataTexture(auxData, GN, GN, THREE.RGBAFormat, THREE.UnsignedByteType);
+auxTex.needsUpdate = true; auxTex.minFilter = auxTex.magFilter = THREE.NearestFilter;
+
+// ---------- water sim (virtual pipes, ping-pong RGBA32F) ----------
+function makeRT() {
+  return new THREE.WebGLRenderTarget(GN, GN, {
+    format: THREE.RGBAFormat, type: THREE.FloatType,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: false, stencilBuffer: false });
+}
+const depthRT = [makeRT(), makeRT()], fluxRT = [makeRT(), makeRT()];
+let cur = 0; // current depth/flux read index
+const simCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const simGeo = new THREE.PlaneGeometry(2, 2);
+function simPass(frag, uniforms) {
+  const m = new THREE.ShaderMaterial({
+    uniforms, fragmentShader: frag,
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy,0.,1.); }",
+    depthTest: false, depthWrite: false });
+  const s = new THREE.Scene(); s.add(new THREE.Mesh(simGeo, m));
+  return { scene: s, mat: m };
+}
+const simU = {
+  uDepth: { value: null }, uFlux: { value: null },
+  uTerr: { value: terrTex }, uAux: { value: auxTex },
+  uDt: { value: 1.2 }, uCell: { value: CELL }, uG: { value: 9.81 },
+  uDamp: { value: 0.985 }, uTexel: { value: texel },
+  uRain: { value: 0 }, uInfil: { value: 8e-7 },
+  uDrainCap: { value: 0.00022 }, uDrainMul: { value: 0.18 },
+  uOdawBoost: { value: 1.0 }, uWetMul: { value: 1.0 },
+  uSea: { value: 0.3 },
+};
+const maskFns = `
+  float bit0(float m){ return step(0.5, mod(m, 2.0)); }
+  float bit1(float m){ return step(0.5, mod(floor(m / 2.0), 2.0)); }
+  float bit2(float m){ return step(0.5, mod(floor(m / 4.0), 2.0)); }`;
+const resetPass = simPass(`
+  uniform sampler2D uTerr, uAux; uniform float uSea; varying vec2 vUv; ${maskFns}
+  void main(){
+    float e = texture2D(uTerr, vUv).r;
+    float m = texture2D(uAux, vUv).g * 255.0;
+    float wet0 = max(bit0(m), bit1(m));
+    gl_FragColor = vec4(wet0 * max(0.0, uSea * bit0(m) - e), 0., 0., 1.);
+  }`, simU);
+const zeroPass = simPass("void main(){ gl_FragColor = vec4(0.); }", {});
+const fluxPass = simPass(`
+  uniform sampler2D uDepth, uFlux, uTerr, uAux;
+  uniform float uDt, uCell, uG, uDamp, uTexel;
+  varying vec2 vUv;
+  float H(vec2 uv){ return texture2D(uTerr, uv).r + texture2D(uDepth, uv).r; }
+  void main(){
+    vec2 px = vec2(uTexel, 0.), py = vec2(0., uTexel);
+    float d = texture2D(uDepth, vUv).r;
+    vec4 f = texture2D(uFlux, vUv);
+    float h = H(vUv);
+    vec4 dh = vec4(h - H(vUv - px), h - H(vUv + px), h - H(vUv - py), h - H(vUv + py));
+    vec4 nf = max(vec4(0.), f * uDamp + uDt * uG * uCell * 0.20 * dh);
+    float vCap = mix(1.3, 4.5, texture2D(uAux, vUv).r);
+    nf = min(nf, vec4(vCap * d * uCell));
+    float tot = nf.x + nf.y + nf.z + nf.w;
+    float K = tot > 1e-9 ? min(1.0, d * uCell * uCell / (tot * uDt)) : 0.0;
+    gl_FragColor = nf * K;
+  }`, simU);
+const depthPass = simPass(`
+  uniform sampler2D uDepth, uFlux, uTerr, uAux;
+  uniform float uDt, uCell, uTexel, uRain, uInfil, uDrainCap, uDrainMul,
+                uOdawBoost, uWetMul, uSea;
+  varying vec2 vUv; ${maskFns}
+  void main(){
+    vec2 px = vec2(uTexel, 0.), py = vec2(0., uTexel);
+    float d = texture2D(uDepth, vUv).r;
+    vec4 f = texture2D(uFlux, vUv);
+    float okL = step(uTexel, vUv.x), okR = step(vUv.x, 1.0 - uTexel),
+          okB = step(uTexel, vUv.y), okT = step(vUv.y, 1.0 - uTexel);
+    float fin = okL * texture2D(uFlux, vUv - px).y
+              + okR * texture2D(uFlux, vUv + px).x
+              + okB * texture2D(uFlux, vUv - py).w
+              + okT * texture2D(uFlux, vUv + py).z;
+    d += uDt * (fin - (f.x + f.y + f.z + f.w)) / (uCell * uCell);
+    d *= okL * okR * okB * okT; // open boundary: water leaves the domain at edges
+    d += uRain * uDt;
+    vec4 aux = texture2D(uAux, vUv);
+    float m = aux.g * 255.0, conv = aux.r;
+    float ocean = bit0(m), wet = bit2(m);
+    float urb = clamp(aux.b * 2.6, 0.0, 1.0);
+    float pervious = 1.0 - urb;
+    float infil = uInfil * (1.0 + 3.5 * pervious + 9.0 * wet * uWetMul) * (1.0 - ocean);
+    float boost = mix(1.0, uOdawBoost, step(0.7, conv));
+    float dcap = conv * uDrainCap * uDrainMul * boost;
+    d = max(0.0, d - (infil + dcap) * uDt);
+    float target = max(0.0, uSea - texture2D(uTerr, vUv).r);
+    d = mix(d, target, ocean);
+    gl_FragColor = vec4(d, 0., 0., 1.);
+  }`, simU);
+function runPass(p, rt) {
+  renderer.setRenderTarget(rt); renderer.render(p.scene, simCam);
+  renderer.setRenderTarget(null);
+}
+function simStep(n) {
+  for (let i = 0; i < n; i++) {
+    simU.uDepth.value = depthRT[cur].texture; simU.uFlux.value = fluxRT[cur].texture;
+    runPass(fluxPass, fluxRT[1 - cur]);
+    simU.uFlux.value = fluxRT[1 - cur].texture;
+    runPass(depthPass, depthRT[1 - cur]);
+    cur = 1 - cur;
+  }
+}
+function simReset() {
+  runPass(resetPass, depthRT[0]); runPass(resetPass, depthRT[1]);
+  runPass(zeroPass, fluxRT[0]); runPass(zeroPass, fluxRT[1]);
+  cur = 0; simClock = 0; updateReadouts(true);
+}
+
+// ---------- terrain + water meshes (shared flat grid, shader displacement) ----------
+function gridGeometry() {
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(GN * GN * 3), uv = new Float32Array(GN * GN * 2);
+  let k = 0, ku = 0;
+  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
+    const mx = (i + 0.5) * CELL, my = (j + 0.5) * CELL;
+    pos[k++] = wx(mx); pos[k++] = 0; pos[k++] = wz(my);
+    uv[ku++] = (i + 0.5) / GN; uv[ku++] = (j + 0.5) / GN;
+  }
+  const idx = new Uint32Array((GN - 1) * (GN - 1) * 6);
+  let t = 0;
+  for (let j = 0; j < GN - 1; j++) for (let i = 0; i < GN - 1; i++) {
+    const a = j * GN + i, b = a + 1, c = a + GN, d = c + 1;
+    idx[t++] = a; idx[t++] = c; idx[t++] = b; idx[t++] = b; idx[t++] = c; idx[t++] = d;
+  }
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  return g;
+}
+const grid = gridGeometry();
+const terrMat = new THREE.ShaderMaterial({
+  uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex } },
+  vertexShader: `
+    uniform sampler2D uTerr; varying vec2 vUv; varying float vE;
+    void main(){
+      vUv = uv; vE = texture2D(uTerr, uv).r;
+      vec3 p = position; p.y = vE;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: `
+    uniform sampler2D uAux; varying vec2 vUv; varying float vE;
+    ${maskFns}
+    void main(){
+      float m = texture2D(uAux, vUv).g * 255.0;
+      float t = clamp(vE / 220.0, 0.0, 1.0);
+      vec3 c = mix(vec3(0.043, 0.055, 0.075), vec3(0.10, 0.14, 0.20), t);
+      float contour = smoothstep(0.92, 1.0, fract(vE / 10.0));
+      c += contour * vec3(0.020, 0.030, 0.045);
+      c = mix(c, vec3(0.030, 0.062, 0.085), max(bit0(m), bit1(m)) * 0.9);
+      c = mix(c, vec3(0.045, 0.075, 0.055), bit2(m) * 0.6);
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+  fog: false });
+const terrainMesh = new THREE.Mesh(grid, terrMat);
+terrainMesh.frustumCulled = false;
+scene.add(terrainMesh);
+
+const waterU = {
+  uTerr: { value: terrTex }, uDepth: { value: null }, uTime: uTime,
+};
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: waterU,
+  vertexShader: `
+    uniform sampler2D uTerr, uDepth; varying float vD; varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      float e = texture2D(uTerr, uv).r;
+      float d = texture2D(uDepth, uv).r;
+      vD = d;
+      vec3 p = position; p.y = e + d + 0.15;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: `
+    uniform float uTime; varying float vD; varying vec2 vUv;
+    void main(){
+      float a = smoothstep(0.02, 0.12, vD) * 0.88;
+      if (a < 0.01) discard;
+      vec3 shallow = vec3(0.13, 0.75, 0.85), mid = vec3(0.10, 0.45, 0.80),
+           deep = vec3(0.07, 0.26, 0.52);
+      vec3 c = mix(shallow, mid, smoothstep(0.1, 1.2, vD));
+      c = mix(c, deep, smoothstep(1.2, 4.0, vD));
+      float shimmer = 0.04 * sin(vUv.x * 900.0 + uTime * 1.7) * sin(vUv.y * 800.0 - uTime * 1.3);
+      c += shimmer * smoothstep(0.05, 0.4, vD);
+      c = mix(c, vec3(1.0, 0.18, 0.58), smoothstep(1.5, 3.5, vD) * 0.35);
+      gl_FragColor = vec4(c, a);
+    }`,
+  transparent: true, depthWrite: false, fog: false });
+const waterMesh = new THREE.Mesh(grid, waterMat);
+waterMesh.frustumCulled = false; waterMesh.renderOrder = 4;
+scene.add(waterMesh);
+
+// ---------- buildings ----------
+const buildings = decodeLines(bLen, bStart, bDelta);
+const nB = buildings.length;
+const areas = new Float32Array(nB);
+for (let i = 0; i < nB; i++) {
+  const p = buildings[i]; let a = 0;
+  const n = p.length / 2;
+  for (let j = 0; j < n; j++) {
+    const k = (j + 1) % n;
+    a += p[j * 2] * p[k * 2 + 1] - p[k * 2] * p[j * 2 + 1];
+  }
+  if (a < 0) { // enforce CCW so wall normals point outward and roofs face up
+    for (let j = 0; j < n >> 1; j++) {
+      const k = n - 1 - j;
+      let t = p[j * 2]; p[j * 2] = p[k * 2]; p[k * 2] = t;
+      t = p[j * 2 + 1]; p[j * 2 + 1] = p[k * 2 + 1]; p[k * 2 + 1] = t;
+    }
+  }
+  areas[i] = Math.abs(a) / 2;
+}
+const orderArr = Array.from({ length: nB }, (_, i) => i)
+  .sort((x, y) => areas[y] - areas[x]);
+// count verts
+let totV = 0;
+for (let i = 0; i < nB; i++) {
+  const n = buildings[i].length / 2;
+  totV += n * 6; // walls
+}
+const roofIdxCache = new Array(nB);
+for (let i = 0; i < nB; i++) {
+  const tri = earcut(Array.from(buildings[i]));
+  roofIdxCache[i] = tri; totV += tri.length;
+}
+const posA = new Float32Array(totV * 3), colA = new Uint8Array(totV * 3),
+      nrmA = new Int8Array(totV * 3);
+const cumV = new Float32Array(nB + 1), bCell = new Uint32Array(nB);
+const SUN = [-0.591, 0.806]; // normalized (-0.55, 0.75)
+function ramp(h) {
+  const t = Math.min(Math.max(Math.log(Math.max(h, 2.5) / 2.5) / Math.log(70 / 2.5), 0), 1);
+  let r, g, b;
+  if (t < 0.45) { const u = t / 0.45;
+    r = 44 + (116 - 44) * u; g = 66 + (132 - 66) * u; b = 108 + (166 - 108) * u; }
+  else if (t < 0.75) { const u = (t - 0.45) / 0.3;
+    r = 116 + (159 - 116) * u; g = 132 + (216 - 132) * u; b = 166 + (232 - 166) * u; }
+  else { const u = (t - 0.75) / 0.25;
+    r = 159 + (234 - 159) * u; g = 216 + (255 - 216) * u; b = 232 + (255 - 232) * u; }
+  return [r, g, b];
+}
+let vk = 0;
+function push(x, y, z, cr, cg, cb, nx, ny, nz) {
+  posA[vk * 3] = x; posA[vk * 3 + 1] = y; posA[vk * 3 + 2] = z;
+  colA[vk * 3] = cr; colA[vk * 3 + 1] = cg; colA[vk * 3 + 2] = cb;
+  nrmA[vk * 3] = nx * 127; nrmA[vk * 3 + 1] = ny * 127; nrmA[vk * 3 + 2] = nz * 127;
+  vk++;
+}
+for (let oi = 0; oi < nB; oi++) {
+  const i = orderArr[oi], p = buildings[i], n = p.length / 2;
+  let h = bH[i];
+  if (h <= 0) h = 3.4 + ((i * 2654435761 >>> 0) % 100) / 100 * 3.4;
+  let cx = 0, cy = 0;
+  for (let j = 0; j < n; j++) { cx += p[j * 2]; cy += p[j * 2 + 1]; }
+  cx /= n; cy /= n;
+  const base = groundAt(cx, cy) - 0.6, top = base + 0.6 + h;
+  const gi = Math.min(GN - 1, cx / CELL | 0), gj = Math.min(GN - 1, cy / CELL | 0);
+  bCell[oi] = gj * GN + gi;
+  const [br, bg, bb] = ramp(h);
+  for (let j = 0; j < n; j++) {
+    const k = (j + 1) % n;
+    const x1 = p[j * 2], y1 = p[j * 2 + 1], x2 = p[k * 2], y2 = p[k * 2 + 1];
+    let ex = y2 - y1, ey = -(x2 - x1); // outward normal in map coords (CCW ring)
+    const el = Math.hypot(ex, ey) || 1; ex /= el; ey /= el;
+    const lam = 0.42 + 0.58 * Math.max(0, ex * SUN[0] + ey * SUN[1]);
+    const cr = br * lam, cg = bg * lam, cb = bb * lam;
+    const nx = ex, nz = -ey;
+    const X1 = wx(x1), Z1 = wz(y1), X2 = wx(x2), Z2 = wz(y2);
+    push(X1, base, Z1, cr, cg, cb, nx, 0, nz);
+    push(X2, base, Z2, cr, cg, cb, nx, 0, nz);
+    push(X2, top, Z2, cr, cg, cb, nx, 0, nz);
+    push(X1, base, Z1, cr, cg, cb, nx, 0, nz);
+    push(X2, top, Z2, cr, cg, cb, nx, 0, nz);
+    push(X1, top, Z1, cr, cg, cb, nx, 0, nz);
+  }
+  const tri = roofIdxCache[i];
+  const rr = Math.min(255, br * 1.15), rg = Math.min(255, bg * 1.15), rb = Math.min(255, bb * 1.15);
+  for (let t = 0; t < tri.length; t += 3) {
+    // wind roof up: map CCW -> world needs reversal because z = -y
+    const a = tri[t], b = tri[t + 2], c = tri[t + 1];
+    push(wx(p[a * 2]), top, wz(p[a * 2 + 1]), rr, rg, rb, 0, 1, 0);
+    push(wx(p[b * 2]), top, wz(p[b * 2 + 1]), rr, rg, rb, 0, 1, 0);
+    push(wx(p[c * 2]), top, wz(p[c * 2 + 1]), rr, rg, rb, 0, 1, 0);
+  }
+  cumV[oi + 1] = vk;
+}
+const bGeo = new THREE.BufferGeometry();
+bGeo.setAttribute("position", new THREE.BufferAttribute(posA, 3));
+bGeo.setAttribute("color", new THREE.BufferAttribute(colA, 3, true));
+bGeo.setAttribute("normal", new THREE.BufferAttribute(nrmA, 3, true));
+const bldU = {
+  uTime: uTime, uScan: uScan, uPulse: uPulse, uCam: uCam,
+  uDepth: { value: null }, uSpan: uSpanU, uFloodGlow: { value: 1 },
+};
+const bldMat = new THREE.ShaderMaterial({
+  uniforms: bldU,
+  vertexShader: `
+    attribute vec3 color;
+    varying vec3 vC; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vC = color; vN = normal;
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vW = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    uniform float uTime, uScan, uPulse, uFloodGlow, uSpan;
+    uniform vec3 uCam; uniform sampler2D uDepth;
+    varying vec3 vC; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 c = vC;
+      float wall = step(abs(vN.y), 0.6);
+      float fl = fract(vW.y / 3.0);
+      float band = smoothstep(0.55, 0.35, fl) * smoothstep(0.05, 0.25, fl);
+      c += uScan * wall * band * vec3(0.05, 0.12, 0.16);
+      float fr = pow(1.0 - abs(dot(normalize(vN), normalize(uCam - vW))), 2.6);
+      c += fr * vec3(0.18, 0.55, 0.70) * 0.55;
+      float dcen = length(vW.xz);
+      float ph = mod(dcen - uTime * 220.0, 2800.0);
+      float w = exp(-abs(ph - 200.0) / 110.0);
+      c += uPulse * w * mix(vec3(0.15, 0.5, 0.6), vec3(0.65, 0.12, 0.45),
+                            0.5 + 0.5 * sin(uTime * 0.7)) * 0.5;
+      vec2 uv = vec2((vW.x + uSpan * 0.5) / uSpan, (uSpan * 0.5 - vW.z) / uSpan);
+      float d = texture2D(uDepth, uv).r;
+      c += uFloodGlow * vec3(1.0, 0.13, 0.55) * smoothstep(0.25, 1.6, d) * 0.75;
+      gl_FragColor = vec4(c * 1.22, 0.93);
+    }`,
+  transparent: true, depthWrite: true, fog: false });
+const bldMesh = new THREE.Mesh(bGeo, bldMat);
+bldMesh.frustumCulled = false; bldMesh.renderOrder = 2;
+scene.add(bldMesh);
+
+// ---------- roads + waterways ----------
+function lineLayer(items, klass, colorFn, yOff, blending, opacity) {
+  let segs = 0;
+  for (const p of items) segs += p.length / 2 - 1;
+  const pos = new Float32Array(segs * 6), col = new Uint8Array(segs * 6);
+  let k = 0;
+  for (let i = 0; i < items.length; i++) {
+    const p = items[i], [r, g, b] = colorFn(klass[i]);
+    for (let j = 0; j < p.length / 2 - 1; j++) {
+      const x1 = p[j * 2], y1 = p[j * 2 + 1], x2 = p[j * 2 + 2], y2 = p[j * 2 + 3];
+      pos[k * 6] = wx(x1); pos[k * 6 + 1] = groundAt(x1, y1) + yOff; pos[k * 6 + 2] = wz(y1);
+      pos[k * 6 + 3] = wx(x2); pos[k * 6 + 4] = groundAt(x2, y2) + yOff; pos[k * 6 + 5] = wz(y2);
+      for (const o of [0, 3]) { col[k * 6 + o] = r; col[k * 6 + o + 1] = g; col[k * 6 + o + 2] = b; }
+      k++;
+    }
+  }
+  const g2 = new THREE.BufferGeometry();
+  g2.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g2.setAttribute("color", new THREE.BufferAttribute(col, 3, true));
+  const m = new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity,
+    blending, depthWrite: false, fog: false });
+  const mesh = new THREE.LineSegments(g2, m);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+const roads = decodeLines(rLen, rStart, rDelta);
+const roadColors = [[92, 118, 168], [74, 95, 138], [58, 76, 112], [44, 59, 90]];
+const roadMesh = lineLayer(roads, rClass, c => roadColors[c], 1.2,
+                           THREE.NormalBlending, 0.75);
+roadMesh.renderOrder = 1; scene.add(roadMesh);
+const waterways = decodeLines(wLen, wStart, wDelta);
+const wwColors = { 0: [212, 38, 125], 1: [160, 31, 96], 2: [212, 38, 125],
+                   3: [255, 45, 149], 4: [255, 45, 149] };
+const wwMesh = lineLayer(waterways, wClass, c => wwColors[c], 1.6,
+                         THREE.AdditiveBlending, 0.85);
+wwMesh.renderOrder = 3; scene.add(wwMesh);
+
+// ---------- rain streaks ----------
+const RAIN_N = 2600, rainBoxH = 2600, rainBoxR = 5200;
+const rPos = new Float32Array(RAIN_N * 6);
+for (let i = 0; i < RAIN_N; i++) {
+  const x = (Math.random() * 2 - 1) * rainBoxR, z = (Math.random() * 2 - 1) * rainBoxR,
+        y = Math.random() * rainBoxH;
+  rPos[i * 6] = x; rPos[i * 6 + 1] = y; rPos[i * 6 + 2] = z;
+  rPos[i * 6 + 3] = x; rPos[i * 6 + 4] = y - 55; rPos[i * 6 + 5] = z;
+}
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rPos, 3));
+const rainU = { uTime: uTime, uOn: { value: 0 }, uH: { value: rainBoxH } };
+const rainMat = new THREE.ShaderMaterial({
+  uniforms: rainU,
+  vertexShader: `
+    uniform float uTime, uH;
+    void main(){
+      vec3 p = position;
+      p.y = mod(p.y - uTime * 900.0, uH);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: `
+    uniform float uOn;
+    void main(){ if (uOn < 0.5) discard; gl_FragColor = vec4(0.35, 0.55, 0.75, 0.13); }`,
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+const rainMesh = new THREE.LineSegments(rainGeo, rainMat);
+rainMesh.frustumCulled = false; rainMesh.renderOrder = 6;
+scene.add(rainMesh);
+
+// ---------- bloom ----------
+const composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+const bloom = new THREE.UnrealBloomPass(
+  new THREE.Vector2(innerWidth, innerHeight), 0.75, 0.45, 0.6);
+composer.addPass(bloom);
+let bloomOn = true;
+
+// ---------- storm state / UI ----------
+let simClock = 0, raining = false, running = true;
+const storm = { rate: 47, durH: 3.0 }; // mm/h, hours
+const SIM_STEPS = 6, MM_H = 2.7778e-7;
+function setPreset(rate, durH, btn) {
+  storm.rate = rate; storm.durH = durH;
+  document.getElementById("rainSlider").value = rate;
+  for (const id of ["p2015", "p2026", "pCust"])
+    document.getElementById(id).classList.toggle("on", id === btn);
+}
+const $ = id => document.getElementById(id);
+$("cBld").textContent = nB.toLocaleString();
+$("cDrn").textContent = waterways.length.toLocaleString();
+$("p2015").onclick = () => setPreset(60, 3.5, "p2015");
+$("p2026").onclick = () => setPreset(47, 3.0, "p2026");
+$("pCust").onclick = () => setPreset(+$("rainSlider").value, 6.0, "pCust");
+$("rainSlider").oninput = e => { storm.rate = +e.target.value; storm.durH = 6.0;
+  setPreset(storm.rate, 6.0, "pCust"); };
+$("btnRain").onclick = () => {
+  raining = !raining;
+  $("btnRain").innerHTML = raining ? "&#9646;&#9646; pause storm" : "&#9654; start storm";
+  $("btnRain").classList.toggle("on", raining);
+};
+$("btnReset").onclick = () => { raining = false;
+  $("btnRain").innerHTML = "&#9654; start storm";
+  $("btnRain").classList.remove("on"); simReset(); };
+$("drainSlider").oninput = e => simU.uDrainMul.value = 0.05 + (+e.target.value / 100) * 0.95;
+$("odawChk").onchange = e => simU.uOdawBoost.value = e.target.checked ? 2.4 : 1.0;
+$("wetChk").onchange = e => simU.uWetMul.value = e.target.checked ? 2.2 : 1.0;
+$("tideSlider").oninput = e => simU.uSea.value = +e.target.value / 100;
+$("bloomChk").onchange = e => bloomOn = e.target.checked;
+$("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
+$("pulseChk").onchange = e => uPulse.value = e.target.checked ? 1 : 0;
+$("densSlider").oninput = e => {
+  const k = Math.round(nB * (+e.target.value / 100));
+  bGeo.setDrawRange(0, k > 0 ? cumV[k] : 0);
+};
+
+// ---------- readouts ----------
+const readBuf = new Float32Array(GN * GN * 4);
+let landCells = 0;
+for (let i = 0; i < GN * GN; i++) if (!(maskU8[i] & 3)) landCells++;
+function updateReadouts(force) {
+  renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
+  let flooded = 0;
+  for (let i = 0; i < GN * GN; i++)
+    if (!(maskU8[i] & 3) && convU8[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
+  let bldWet = 0;
+  for (let i = 0; i < nB; i++) {
+    const c = bCell[i];
+    if (!(maskU8[c] & 3) && convU8[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
+  }
+  $("rFlood").textContent = (flooded * CELL * CELL / 1e6).toFixed(1) + " km²";
+  $("rBld").textContent = bldWet.toLocaleString();
+  const h = Math.floor(simClock / 3600), mn = Math.floor(simClock % 3600 / 60);
+  $("rClock").textContent = "T+" + h + ":" + String(mn).padStart(2, "0");
+  $("rRain").textContent = (raining && simClock < storm.durH * 3600 ?
+    storm.rate : 0) + " mm/h";
+}
+
+// ---------- animate ----------
+simReset();
+const clock = new THREE.Clock();
+let frame = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  uTime.value += dt;
+  uCam.value.copy(camera.position);
+  controls.update();
+  if (running) {
+    const active = raining && simClock < storm.durH * 3600;
+    simU.uRain.value = active ? storm.rate * MM_H : 0;
+    rainU.uOn.value = active ? 1 : 0;
+    if (raining) {
+      simStep(SIM_STEPS);
+      simClock += SIM_STEPS * simU.uDt.value; // physical storm seconds
+    }
+  }
+  rainMesh.position.set(controls.target.x, 0, controls.target.z);
+  waterU.uDepth.value = depthRT[cur].texture;
+  bldU.uDepth.value = depthRT[cur].texture;
+  if (++frame % 45 === 0) updateReadouts();
+  if (bloomOn) composer.render(); else renderer.render(scene, camera);
+}
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+window.FG = { camera, controls, simU, simReset, storm,
+  setRain: v => { raining = v; }, readouts: updateReadouts,
+  run: (hours, rateMmH) => { // synchronous scripted run for scenario comparison
+    raining = false;
+    simU.uRain.value = (rateMmH || 0) * MM_H;
+    const steps = Math.round(hours * 3600 / simU.uDt.value);
+    simStep(steps);
+    simClock += steps * simU.uDt.value;
+    simU.uRain.value = 0;
+    updateReadouts(true);
+  },
+  probe: () => {
+    renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
+    let vol = 0, mx = 0, mi = -1, n25 = 0, n05 = 0;
+    for (let i = 0; i < GN * GN; i++) {
+      if (maskU8[i] & 3) continue;
+      const d = readBuf[i * 4];
+      vol += d;
+      if (convU8[i] >= 90) continue; // in-channel water is not street flooding
+      if (d > mx) { mx = d; mi = i; }
+      if (d > 0.25) n25++;
+      if (d > 0.05) n05++;
+    }
+    return { volM3: Math.round(vol * CELL * CELL), maxD: +mx.toFixed(2),
+      maxCell: [mi % GN, (mi / GN) | 0], cells25: n25, cells05: n05,
+      clock: simClock };
+  } };
+animate();
+</script>
+</body>
+</html>
