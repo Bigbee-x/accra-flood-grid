@@ -613,13 +613,20 @@ const terrMat = new THREE.ShaderMaterial({
     ${maskFns}
     ${NOISE}
     void main(){
-      float m = texture2D(uAux, vUv).g * 255.0;
+      vec4 aux = texture2D(uAux, vUv);
+      float m = aux.g * 255.0;
       float t = clamp(vE / 220.0, 0.0, 1.0);
       vec3 c = mix(vec3(0.845, 0.800, 0.700), vec3(0.635, 0.560, 0.450), t);
       float contour = smoothstep(0.92, 1.0, fract(vE / 10.0));
       c -= contour * vec3(0.055, 0.050, 0.045);
       c = mix(c, vec3(0.700, 0.760, 0.820), max(bit0(m), bit1(m)) * 0.9);
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
+      // engineered works painted into aux.a: 60 drain / 120 channel / 180 levee / 240 basin
+      float w = aux.a * 255.0;
+      c = mix(c, vec3(0.90, 0.44, 0.13), step(30.0, w) * (1.0 - step(90.0, w)) * 0.88);
+      c = mix(c, vec3(0.55, 0.56, 0.58), step(90.0, w) * (1.0 - step(150.0, w)) * 0.90);
+      c = mix(c, vec3(0.63, 0.42, 0.27), step(150.0, w) * (1.0 - step(210.0, w)) * 0.90);
+      c = mix(c, vec3(0.46, 0.48, 0.44), step(210.0, w) * 0.86);
       float sh = fbm((vXZ + uWind) / 5200.0);
       c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
@@ -1438,21 +1445,38 @@ $("cmpWipe").addEventListener("pointerdown", e => {
 
 // ---------- engineering mode: live terrain / drainage / demolition editing ----------
 const elev0 = elev.slice(), conv0 = convU8.slice();
+const works = new Uint8Array(GN * GN); // painted surface per cell (drives terrain tint)
 const demolished = new Set();
 const engStrokes = [];
 let engTool = null, engStroke = null, engCost = 0, engCleared = 0, engBrushR = 2;
 const ENG = {
   drain:   { hint: "Storm drain — buried pipe that pulls water out of the grid. Paint a line.",
-             costCell: 55000, ring: 0xe8590c },
+             costCell: 55000, ring: 0xe8590c, code: 60 },
   channel: { hint: "Open channel — dig a 2 m diversion so water routes where you want it.",
-             costCell: 28000, ring: 0x1d6fd1 },
-  levee:   { hint: "Levee wall — raise a 2.5 m earth wall. Dam water out… or in. Careful.",
-             costCell: 18000, ring: 0x8a6202 },
+             costCell: 28000, ring: 0x1d6fd1, code: 120 },
+  levee:   { hint: "Levee wall — raise a 3 m earth wall. Dam water out… or in. Careful.",
+             costCell: 18000, ring: 0x8a6202, code: 180 },
   basin:   { hint: "Retention basin — excavate storage upstream so the peak never arrives.",
-             costCell: 35000, ring: 0x1d6fd1 },
+             costCell: 35000, ring: 0x1d6fd1, code: 240 },
   clear:   { hint: "Clear buildings — relocate structures off the floodplain. They leave the risk count.",
              costCell: 9000, ring: 0xa32d2d },
 };
+function setWorks(idx, code, st) {
+  if (!st.works.has(idx)) st.works.set(idx, works[idx]);
+  works[idx] = code; auxData[idx * 4 + 3] = code;
+}
+const stampPulse = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0,
+    depthWrite: false, side: THREE.DoubleSide }));
+stampPulse.rotation.x = -Math.PI / 2; stampPulse.renderOrder = 9;
+scene.add(stampPulse);
+let pulseT = -1;
+function firePulse(gi, gj, hex) {
+  const mx = (gi + 0.5) * CELL, my = (gj + 0.5) * CELL;
+  stampPulse.material.color.setHex(hex);
+  stampPulse.position.set(mx - HALF, groundAt(mx, my) + 3, HALF - my);
+  pulseT = 0;
+}
 const brushRing = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 48),
   new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.85,
     depthWrite: false, side: THREE.DoubleSide }));
@@ -1504,8 +1528,9 @@ function engStampCells(gi, gj, r, fn) {
 }
 function engStamp(tool, gi, gj, r) {
   const st = engStroke;
+  if (tool !== "clear") firePulse(gi, gj, ENG[tool].ring);
   if (tool === "levee" || tool === "channel" || tool === "basin") {
-    const amp = tool === "levee" ? 2.6 : tool === "channel" ? -2.0 : -2.8;
+    const amp = tool === "levee" ? 3.2 : tool === "channel" ? -2.0 : -2.8;
     const rr = tool === "basin" ? r + 1.5 : r;
     engStampCells(gi, gj, rr, (idx, f) => {
       if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); st.cost += ENG[tool].costCell; }
@@ -1514,14 +1539,16 @@ function engStamp(tool, gi, gj, r) {
       elev[idx] = tool === "levee"
         ? Math.min(st.elev.get(idx) + amp, elev[idx])
         : Math.max(st.elev.get(idx) + amp, elev[idx]);
+      if (f > 0.3) setWorks(idx, ENG[tool].code, st);
     });
-    terrTex.needsUpdate = true;
+    terrTex.needsUpdate = true; auxTex.needsUpdate = true;
   } else if (tool === "drain") {
     engStampCells(gi, gj, r, (idx, f) => {
       if (f < 0.3) return;
       if (!st.conv.has(idx)) { st.conv.set(idx, convU8[idx]); st.cost += ENG.drain.costCell; }
       if (convU8[idx] < 150) { convU8[idx] = 150; auxData[idx * 4] = 150; }
       if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); elev[idx] -= 0.25; }
+      setWorks(idx, ENG.drain.code, st);
     });
     auxTex.needsUpdate = true; terrTex.needsUpdate = true;
   } else if (tool === "clear") {
@@ -1566,7 +1593,8 @@ renderer.domElement.addEventListener("pointerdown", e => {
   const p = pickGround(e.clientX, e.clientY);
   if (!p) return;
   e.preventDefault();
-  engStroke = { tool: engTool, elev: new Map(), conv: new Map(), blds: [], cost: 0 };
+  engStroke = { tool: engTool, elev: new Map(), conv: new Map(), works: new Map(),
+    blds: [], cost: 0 };
   lastStampMx = 1e9;
   engStamp(engTool, p.gi, p.gj, engBrushR);
   lastStampMx = p.mx; lastStampMy = p.my;
@@ -1596,6 +1624,7 @@ addEventListener("pointerup", () => {
 function engRestoreStroke(st) {
   for (const [idx, v] of st.elev) elev[idx] = v;
   for (const [idx, v] of st.conv) { convU8[idx] = v; auxData[idx * 4] = v; }
+  for (const [idx, v] of st.works) { works[idx] = v; auxData[idx * 4 + 3] = v; }
   let minV = Infinity, maxV = 0;
   for (const { b, data } of st.blds) {
     const a = cumV[b] | 0;
@@ -1609,7 +1638,7 @@ function engRestoreStroke(st) {
     attr.needsUpdate = true;
   }
   if (st.elev.size) terrTex.needsUpdate = true;
-  if (st.conv.size) auxTex.needsUpdate = true;
+  if (st.conv.size || st.works.size) auxTex.needsUpdate = true;
 }
 $("engUndo").onclick = () => {
   const st = engStrokes.pop();
@@ -1618,8 +1647,8 @@ $("engUndo").onclick = () => {
 };
 $("engReset").onclick = () => {
   while (engStrokes.length) engRestoreStroke(engStrokes.pop());
-  elev.set(elev0); convU8.set(conv0);
-  for (let i = 0; i < GN * GN; i++) auxData[i * 4] = convU8[i];
+  elev.set(elev0); convU8.set(conv0); works.fill(0);
+  for (let i = 0; i < GN * GN; i++) { auxData[i * 4] = convU8[i]; auxData[i * 4 + 3] = 0; }
   terrTex.needsUpdate = true; auxTex.needsUpdate = true;
   engCost = 0; engCleared = 0; demolished.clear(); engUpdateUI();
 };
@@ -1969,6 +1998,15 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
+  if (pulseT >= 0) {
+    pulseT += dt;
+    const k = pulseT / 0.5;
+    if (k >= 1) { pulseT = -1; stampPulse.material.opacity = 0; }
+    else {
+      stampPulse.scale.setScalar((engBrushR + 0.5) * CELL * (1 + k * 1.6));
+      stampPulse.material.opacity = 0.85 * (1 - k);
+    }
+  }
   if (chopperActive) updateChopper(dt);
   if (tourActive) {
     tourStopT += dt;
@@ -2036,7 +2074,8 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   eng: {
     arm: armTool,
     stamp: (tool, gi, gj, r) => {
-      engStroke = { tool, elev: new Map(), conv: new Map(), blds: [], cost: 0 };
+      engStroke = { tool, elev: new Map(), conv: new Map(), works: new Map(),
+        blds: [], cost: 0 };
       engStamp(tool, gi, gj, r || engBrushR);
       engStrokes.push(engStroke); engCost += engStroke.cost;
       engStroke = null; engUpdateUI();
