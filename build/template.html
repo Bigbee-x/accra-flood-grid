@@ -96,12 +96,18 @@
     background:#eef1f4; border-color:#7d8794; color:#3f4854; padding:7px; font-size:12.5px; }
   #chopBtn.on { background:#e7ecf1; border-color:#3f4854; }
   #chopCap { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:24;
-    display:none; padding:8px 20px; border-radius:11px; background:rgba(252,250,245,.94);
+    display:none; padding:9px 18px 10px; border-radius:12px; background:rgba(252,250,245,.95);
     border:1px solid #d8cec0; box-shadow:0 3px 16px rgba(80,65,45,.22); text-align:center;
-    font:"Helvetica Neue",Helvetica,Arial,sans-serif; }
-  #chopCap .n { font-size:16px; font-weight:600; color:#1f1b16; letter-spacing:.2px; }
-  #chopCap .s { font-size:11.5px; color:#a13c05; margin-top:1px; }
-  #chopCap .k { font-size:10px; color:#a09280; text-transform:uppercase; letter-spacing:1px; }
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; min-width:300px; }
+  #chopModes { display:flex; gap:6px; justify-content:center; margin-bottom:7px; }
+  #chopModes button { flex:0 0 auto; padding:4px 14px; font-size:11.5px;
+    background:#f1eee7; color:#4a4238; border:1px solid #d8cec0; border-radius:7px; cursor:pointer; }
+  #chopModes button.on { background:#e7ecf1; border-color:#3f4854; color:#2b333c; font-weight:600; }
+  #chopCap .n { font-size:15.5px; color:#1f1b16; letter-spacing:.2px; }
+  #chopCap .n span#chopName { font-weight:600; }
+  #chopCap .s { font-size:11.5px; color:#a13c05; font-weight:400; }
+  #chopKeys { display:none; font-size:11px; color:#6f6555; margin-top:6px; }
+  #chopKeys b { color:#2b333c; font-weight:600; }
   #tour { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:25;
     width:min(580px,92vw); box-sizing:border-box; background:rgba(252,250,245,.96);
     border:1px solid #d8cec0; border-radius:12px; box-shadow:0 4px 22px rgba(80,65,45,.22);
@@ -277,9 +283,13 @@
 </div>
 
 <div id="chopCap">
-  <div class="k">now flying over</div>
-  <div class="n" id="chopName">Accra</div>
-  <div class="s" id="chopSub">Odaw basin</div>
+  <div id="chopModes">
+    <button id="chopAuto" class="on">Auto-pilot</button>
+    <button id="chopManual">Fly it myself</button>
+  </div>
+  <div class="n"><span id="chopName">Accra</span> <span class="s" id="chopSub"></span></div>
+  <div id="chopKeys"><b>W</b>/<b>S</b> forward &middot; back &nbsp; <b>A</b>/<b>D</b> turn
+    &nbsp; <b>&uarr;</b>/<b>&darr;</b> climb &middot; descend</div>
 </div>
 
 <div id="cmpTagL" class="cmpTag">Drains clogged — today</div>
@@ -1493,50 +1503,104 @@ const chopStops = chopRoute.map(n => {
   return p ? { n: p.n, aff: p.aff, v: new THREE.Vector3(p.wx, p.gy + CHOP_ALT, p.wz) } : null;
 }).filter(Boolean);
 const chopCurve = new THREE.CatmullRomCurve3(chopStops.map(s => s.v), true, "catmullrom", 0.4);
-let chopperActive = false, chopT = 0;
-const chopSpeed = 1 / 95, chopUp = new THREE.Vector3(0, 1, 0);
-const _cp = new THREE.Vector3(), _cf = new THREE.Vector3(), _prevF = new THREE.Vector3(),
-      _camWant = new THREE.Vector3(), _lookWant = new THREE.Vector3(),
-      _lookNow = new THREE.Vector3(), _cross = new THREE.Vector3(), _t2 = new THREE.Vector3(),
-      _right = new THREE.Vector3();
-const CHASE_SIDE = 46; // push the chopper right of the control panel
-let bankNow = 0;
-chopCurve.getTangentAt(0, _prevF);
-chopCurve.getPointAt(0, _lookNow);
+let chopperActive = false, chopMode = "auto", chopT = 0;
+const chopSpeed = 1 / 95, chopUp = new THREE.Vector3(0, 1, 0), CHASE_SIDE = 46, MARGIN = 900;
+const chopPos = new THREE.Vector3(), chopFwd = new THREE.Vector3(0, 0, 1);
+const _camWant = new THREE.Vector3(), _lookWant = new THREE.Vector3(),
+      _lookNow = new THREE.Vector3(), _right = new THREE.Vector3(),
+      _xA = new THREE.Vector3(), _yA = new THREE.Vector3(), _zA = new THREE.Vector3(),
+      _basis = new THREE.Matrix4();
+let bankNow = 0, pitchNow = 0, prevYaw = 0, chopYaw = 0, chopSpeedFwd = 0, chopClimb = 0;
+const keys = {};
+chopCurve.getPointAt(0, chopPos);
+chopCurve.getTangentAt(0, chopFwd);
+chopYaw = Math.atan2(chopFwd.x, chopFwd.z);
+prevYaw = chopYaw; _lookNow.copy(chopPos);
+addEventListener("keydown", e => {
+  if (!chopperActive || chopMode !== "manual") return;
+  if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k))
+    e.preventDefault();
+  keys[k] = true;
+});
+addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+function chopGround() {
+  const mgx = chopPos.x + HALF, mgz = HALF - chopPos.z;
+  return groundAt(Math.min(SPAN, Math.max(0, mgx)), Math.min(SPAN, Math.max(0, mgz)));
+}
 function updateChopper(dt) {
   mainRotor.rotation.y += 26 * dt; tailRotor.rotation.x += 34 * dt;
-  chopT = (chopT + chopSpeed * dt) % 1;
-  chopCurve.getPointAt(chopT, _cp);
-  chopCurve.getTangentAt(chopT, _cf);
-  chopper.position.set(_cp.x, _cp.y + Math.sin(uTime.value * 1.5) * 3.5, _cp.z);
-  _t2.copy(_cp).add(_cf); chopper.lookAt(_t2);
-  const signedTurn = chopUp.dot(_cross.copy(_prevF).cross(_cf));
-  const bankTarget = Math.max(-0.5, Math.min(0.5, signedTurn * 16));
-  bankNow += (bankTarget - bankNow) * Math.min(1, dt * 2.5);
-  chopper.rotateZ(bankNow); chopper.rotateX(0.05);
-  _prevF.copy(_cf);
-  const mgx = chopper.position.x + HALF, mgz = HALF - chopper.position.z;
-  const g = groundAt(Math.min(SPAN, Math.max(0, mgx)), Math.min(SPAN, Math.max(0, mgz)));
-  chopShadow.position.set(chopper.position.x, g + 2, chopper.position.z);
-  chopShadow.scale.setScalar(Math.max(0.6, 1 + (chopper.position.y - g) / 850));
+  let yawRate = 0;
+  if (chopMode === "auto") {
+    chopT = (chopT + chopSpeed * dt) % 1;
+    chopCurve.getPointAt(chopT, chopPos);
+    chopCurve.getTangentAt(chopT, chopFwd);
+    const ny = Math.atan2(chopFwd.x, chopFwd.z);
+    yawRate = Math.atan2(Math.sin(ny - prevYaw), Math.cos(ny - prevYaw)) / Math.max(dt, 0.001);
+    prevYaw = ny;
+    chopPos.y += Math.sin(uTime.value * 1.1) * 2.5;
+  } else {
+    const kf = (keys["w"] ? 1 : 0) - (keys["s"] ? 1 : 0);
+    const kyaw = (keys["a"] ? 1 : 0) - (keys["d"] ? 1 : 0);
+    const kc = (keys["arrowup"] ? 1 : 0) - (keys["arrowdown"] ? 1 : 0)
+             + (keys["e"] ? 1 : 0) - (keys["q"] ? 1 : 0);
+    yawRate = kyaw * 1.1;
+    chopYaw += yawRate * dt;
+    chopFwd.set(Math.sin(chopYaw), 0, Math.cos(chopYaw));
+    chopSpeedFwd += (kf * 260 - chopSpeedFwd) * Math.min(1, dt * 1.4);
+    chopClimb += (kc * 150 - chopClimb) * Math.min(1, dt * 2.2);
+    chopPos.addScaledVector(chopFwd, chopSpeedFwd * dt);
+    chopPos.y += chopClimb * dt;
+    chopPos.x = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.x));
+    chopPos.z = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.z));
+    chopPos.y = Math.max(chopGround() + 70, Math.min(3600, chopPos.y));
+  }
+  // orientation: nose is modelled on local -Z, so local +Z must map to world -forward
+  _zA.copy(chopFwd).multiplyScalar(-1).normalize();
+  _xA.crossVectors(chopUp, _zA).normalize();
+  _yA.crossVectors(_zA, _xA).normalize();
+  _basis.makeBasis(_xA, _yA, _zA);
+  chopper.position.copy(chopPos);
+  chopper.quaternion.setFromRotationMatrix(_basis);
+  const bankTarget = Math.max(-0.6, Math.min(0.6, yawRate * 0.5));
+  bankNow += (bankTarget - bankNow) * Math.min(1, dt * 3);
+  const pitchTarget = chopMode === "manual"
+    ? Math.max(-0.22, Math.min(0.22, -chopSpeedFwd / 260 * 0.2)) : -0.05;
+  pitchNow += (pitchTarget - pitchNow) * Math.min(1, dt * 3);
+  chopper.rotateZ(bankNow); chopper.rotateX(pitchNow);
+  const g = chopGround();
+  chopShadow.position.set(chopPos.x, g + 2, chopPos.z);
+  chopShadow.scale.setScalar(Math.max(0.6, 1 + (chopPos.y - g) / 850));
+  _right.copy(chopFwd).cross(chopUp).normalize();
   const s = 1 - Math.pow(0.0016, dt);
-  _right.copy(_cf).cross(chopUp).normalize(); // chopper's right in screen space
-  _camWant.copy(_cp).addScaledVector(_cf, -CHASE_BACK).addScaledVector(chopUp, CHASE_UP)
+  _camWant.copy(chopPos).addScaledVector(chopFwd, -CHASE_BACK).addScaledVector(chopUp, CHASE_UP)
     .addScaledVector(_right, -CHASE_SIDE);
   camera.position.lerp(_camWant, s);
-  _lookWant.copy(_cp).addScaledVector(_cf, CHASE_AHEAD).addScaledVector(chopUp, -14)
+  _lookWant.copy(chopPos).addScaledVector(chopFwd, CHASE_AHEAD).addScaledVector(chopUp, -14)
     .addScaledVector(_right, -CHASE_SIDE);
   _lookNow.lerp(_lookWant, s);
   camera.up.set(0, 1, 0); camera.lookAt(_lookNow);
-  if (frame % 10 === 0) {
+  if (frame % 8 === 0) {
     let nd = 1e18, ns = null;
     for (const st of chopStops) {
-      const dx = st.v.x - chopper.position.x, dz = st.v.z - chopper.position.z, d = dx * dx + dz * dz;
+      const dx = st.v.x - chopPos.x, dz = st.v.z - chopPos.z, d = dx * dx + dz * dz;
       if (d < nd) { nd = d; ns = st; }
     }
     if (ns) { $("chopName").textContent = ns.n;
-      $("chopSub").textContent = ns.aff ? "flooded " + ns.aff.y : "Odaw basin"; }
+      $("chopSub").textContent = ns.aff ? "· flooded " + ns.aff.y : ""; }
   }
+}
+function setChopMode(m) {
+  if (m === "manual" && chopMode !== "manual") {
+    chopYaw = Math.atan2(chopFwd.x, chopFwd.z);
+    chopSpeedFwd = 0; chopClimb = 0;
+    for (const k in keys) keys[k] = false;
+  }
+  chopMode = m;
+  $("chopAuto").classList.toggle("on", m === "auto");
+  $("chopManual").classList.toggle("on", m === "manual");
+  $("chopKeys").style.display = m === "manual" ? "block" : "none";
 }
 function enterChopper() {
   if (compareMode) exitCompare();
@@ -1546,6 +1610,7 @@ function enterChopper() {
   chopper.visible = true; chopShadow.visible = true;
   $("chopBtn").innerHTML = "&#10005; Land the chopper"; $("chopBtn").classList.add("on");
   $("chopCap").style.display = "block";
+  setChopMode("auto");
   if (!raining) { $("p2026").click(); simReset(); raining = true; simRate = 150;
     document.querySelectorAll("#spdBtns button").forEach(x => x.classList.toggle("on", x.dataset.s === "150"));
     $("btnRain").innerHTML = "&#9646;&#9646; pause storm"; $("btnRain").classList.add("on"); }
@@ -1560,6 +1625,8 @@ function exitChopper() {
   $("chopCap").style.display = "none";
 }
 $("chopBtn").onclick = () => chopperActive ? exitChopper() : enterChopper();
+$("chopAuto").onclick = () => setChopMode("auto");
+$("chopManual").onclick = () => setChopMode("manual");
 
 // ---------- animate ----------
 sizeTL();
