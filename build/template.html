@@ -35,7 +35,17 @@
   .big { font-size:16px; font-weight:600; color:#1d6fd1; font-variant-numeric:tabular-nums; }
   .danger { color:#e8590c; }
   .sec { border-top:1px solid #e4dccd; margin:10px -16px 0; padding:8px 16px 0; }
-  .sec .t { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#a09280; margin-bottom:6px; }
+  .sec .t { font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:#a09280;
+    margin-bottom:6px; cursor:pointer; display:flex; justify-content:space-between;
+    align-items:center; user-select:none; }
+  .sec .t:hover { color:#7a6f60; }
+  .sec .t::after { content:"\25BE"; font-size:11px; color:#c4b8a4; transition:transform .18s; }
+  .sec.closed .t::after { transform:rotate(-90deg); }
+  .sec.closed .secBody { display:none; }
+  .sec.closed { padding-bottom:2px; }
+  #panelHead { position:sticky; top:-15px; z-index:6; background:rgba(252,250,245,.97);
+    margin:-14px -16px 10px; padding:14px 16px 4px; border-bottom:1px solid #eee5d6;
+    border-radius:12px 12px 0 0; }
   .btns { display:flex; gap:6px; margin:6px 0; }
   button {
     flex:1; background:#f6f1e7; color:#4a4238; border:1px solid #d8cec0; border-radius:7px;
@@ -44,6 +54,10 @@
   button:hover { border-color:#e8590c; }
   button.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; }
   button.play { font-weight:600; }
+  #btnRain { background:#e8590c; border-color:#d14e08; color:#fff; }
+  #btnRain:hover { background:#d14e08; }
+  #btnRain.on { background:#a13c05; border-color:#a13c05; color:#ffe1cf; }
+  #ivChips button.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; font-weight:600; }
   input[type=range] { width:110px; accent-color:#e8590c; height:14px; }
   input[type=checkbox] { accent-color:#e8590c; }
   label.chk { display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer; }
@@ -134,10 +148,6 @@
     font-variant-numeric:tabular-nums; }
   @media (max-width:520px){ #panel{ width:calc(100vw - 32px); } }
   .ivIntro { color:#4a4238; font-size:11.5px; line-height:1.5; margin:0 0 9px; }
-  .engT { position:relative; }
-  .engT.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; font-weight:600; }
-  #engRow2 { margin-top:0; }
-  #engCostV { color:#a13c05; font-weight:600; font-variant-numeric:tabular-nums; }
   .ivRow { margin:9px 0; }
   .ivHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .ivName { font-size:12.5px; color:#2b2620; }
@@ -170,13 +180,15 @@
 <body>
 <button id="panelToggle" title="Hide / show panel (H)" aria-label="Hide or show panel">&#9776;</button>
 <div id="panel">
-  <h1>Accra // flood grid</h1>
-  <div class="sub">Odaw basin &middot; storm replay &middot; live water</div>
-  <div id="qWrap">
-    <input id="q" placeholder="Search a place — Alajo, Kaneshie, Circle&hellip;" autocomplete="off">
-    <div id="qRes"></div>
+  <div id="panelHead">
+    <h1>Accra // flood grid</h1>
+    <div class="sub">Odaw basin &middot; storm replay &middot; live water</div>
+    <div id="qWrap">
+      <input id="q" placeholder="Search a place — Alajo, Kaneshie, Circle&hellip;" autocomplete="off">
+      <div id="qRes"></div>
+    </div>
+    <button id="tourBtn">&#9654; Guided tour of the flood</button>
   </div>
-  <button id="tourBtn">&#9654; Guided tour of the flood</button>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -191,7 +203,7 @@
         <button data-s="75">&#189;&times;</button><button data-s="150" class="on">1&times;</button>
         <button data-s="450">3&times;</button><button data-s="1500">10&times;</button>
       </span></div>
-    <div class="row"><span class="muted">Rain intensity</span>
+    <div class="row" id="rainRow" style="display:none"><span class="muted">Rain intensity</span>
       <input type="range" id="rainSlider" min="0" max="120" value="47" step="1"></div>
     <div class="row"><span class="muted">Storm clock</span><span class="big" id="rClock">T+0:00</span></div>
     <div class="row"><span class="muted">Raining now</span><span class="val" id="rRain">0 mm/h</span></div>
@@ -232,13 +244,18 @@
     <div class="note">Drag to scrub the flood through time &middot; rainfall bars, flooded-area line.</div>
   </div>
 
-  <div class="sec"><div class="t">Interventions — what could stop this</div>
-    <div class="ivIntro">Each control is a real fix Accra is debating. Turn them on and watch
-      the flood shrink — then hit compare to see today vs. fixed, side by side.</div>
+  <div class="sec"><div class="t">Interventions</div>
+    <div class="ivIntro">Every control is a real fix Accra is debating. Changes apply instantly
+      — even mid-storm.</div>
+    <div class="btns" id="ivChips">
+      <button data-iv="today" class="on">Today</button>
+      <button data-iv="garid">GARID done</button>
+      <button data-iv="full">Full works</button>
+    </div>
 
     <div class="ivRow">
       <div class="ivHead"><span class="ivName">Clear the drains</span>
-        <span class="muted" id="drainVal">18%</span></div>
+        <span class="muted" id="drainVal">18% &middot; choked</span></div>
       <span class="ivSub">De-silt and de-plastic the storm drains so they carry water again.</span>
       <input type="range" id="drainSlider" min="0" max="100" value="18">
     </div>
@@ -260,32 +277,9 @@
       <input type="range" id="tideSlider" min="0" max="150" value="30">
     </div>
 
-    <button id="cmpBtn">&#8646; Compare: today vs. fixed</button>
-  </div>
-
-  <div class="sec"><div class="t">Engineering mode</div>
-    <div class="ivIntro">Take the engineer's seat. Arm a tool, then <b>drag on the map</b> —
-      dig channels, raise levees, lay drains, clear the floodplain. The water reacts live.</div>
-    <div class="btns">
-      <button class="engT" data-tool="drain">Storm drain</button>
-      <button class="engT" data-tool="channel">Open channel</button>
-      <button class="engT" data-tool="levee">Levee wall</button>
-    </div>
-    <div class="btns" id="engRow2">
-      <button class="engT" data-tool="basin">Retention basin</button>
-      <button class="engT" data-tool="clear">Clear buildings</button>
-    </div>
-    <div class="row"><span class="muted">Brush size</span>
-      <input type="range" id="engBrush" min="1" max="5" value="2"></div>
-    <div class="row"><span class="muted">Works cost (indicative)</span>
-      <span class="val" id="engCostV">$0</span></div>
-    <div class="row"><span class="muted">Buildings cleared</span><span class="val" id="engClrV">0</span></div>
-    <div class="btns">
-      <button id="engUndo">&#8630; undo</button>
-      <button id="engReset">&#10005; clear all works</button>
-    </div>
-    <div class="note" id="engHint">Camera rotate pauses while a tool is armed — right-drag still pans,
-      scroll zooms. Click the armed tool again to disarm.</div>
+    <button id="cmpBtn">&#8646; Compare: today vs. your fixes</button>
+    <div class="note">In the June 2026 replay, the full package cut peak flooded area by
+      &asymp;46% and buildings in water by &asymp;70%.</div>
   </div>
 
   <div class="sec"><div class="t">Look</div>
@@ -621,12 +615,6 @@ const terrMat = new THREE.ShaderMaterial({
       c -= contour * vec3(0.055, 0.050, 0.045);
       c = mix(c, vec3(0.700, 0.760, 0.820), max(bit0(m), bit1(m)) * 0.9);
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
-      // engineered works painted into aux.a: 60 drain / 120 channel / 180 levee / 240 basin
-      float w = aux.a * 255.0;
-      c = mix(c, vec3(0.90, 0.44, 0.13), step(30.0, w) * (1.0 - step(90.0, w)) * 0.88);
-      c = mix(c, vec3(0.55, 0.56, 0.58), step(90.0, w) * (1.0 - step(150.0, w)) * 0.90);
-      c = mix(c, vec3(0.63, 0.42, 0.27), step(150.0, w) * (1.0 - step(210.0, w)) * 0.90);
-      c = mix(c, vec3(0.46, 0.48, 0.44), step(210.0, w) * 0.86);
       float sh = fbm((vXZ + uWind) / 5200.0);
       c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
@@ -953,6 +941,7 @@ function setPreset(schedule, btn, sliderVal) {
   if (sliderVal != null) document.getElementById("rainSlider").value = sliderVal;
   for (const id of ["p2015", "p2026", "pCust"])
     document.getElementById(id).classList.toggle("on", id === btn);
+  document.getElementById("rainRow").style.display = btn === "pCust" ? "flex" : "none";
 }
 const $ = id => document.getElementById(id);
 $("cBld").textContent = nB.toLocaleString();
@@ -970,10 +959,35 @@ $("btnRain").onclick = () => {
 $("btnReset").onclick = () => { raining = false;
   $("btnRain").innerHTML = "&#9654; start storm";
   $("btnRain").classList.remove("on"); simReset(); };
+const IV_PRESETS = {
+  today: { d: 18, o: false, w: false },
+  garid: { d: 60, o: true, w: false },
+  full:  { d: 100, o: true, w: true },
+};
+function drainWord(v) {
+  return v < 25 ? "choked" : v < 50 ? "silted" : v < 80 ? "maintained" : "clear";
+}
+function setIv(d, o, w) {
+  ivDrainMul = 0.05 + (d / 100) * 0.95; ivOdaw = o ? 2.4 : 1.0; ivWet = w ? 2.2 : 1.0;
+  $("drainSlider").value = d;
+  $("drainVal").innerHTML = d + "% &middot; " + drainWord(d);
+  $("odawChk").checked = o; $("wetChk").checked = w;
+  syncIvChips();
+}
+function syncIvChips() {
+  const d = +$("drainSlider").value, o = $("odawChk").checked, w = $("wetChk").checked;
+  for (const b of document.querySelectorAll("#ivChips button")) {
+    const p = IV_PRESETS[b.dataset.iv];
+    b.classList.toggle("on", p.d === d && p.o === o && p.w === w);
+  }
+}
+for (const b of document.querySelectorAll("#ivChips button"))
+  b.onclick = () => { const p = IV_PRESETS[b.dataset.iv]; setIv(p.d, p.o, p.w); };
 $("drainSlider").oninput = e => { ivDrainMul = 0.05 + (+e.target.value / 100) * 0.95;
-  $("drainVal").textContent = e.target.value + "%"; };
-$("odawChk").onchange = e => { ivOdaw = e.target.checked ? 2.4 : 1.0; };
-$("wetChk").onchange = e => { ivWet = e.target.checked ? 2.2 : 1.0; };
+  $("drainVal").innerHTML = e.target.value + "% &middot; " + drainWord(+e.target.value);
+  syncIvChips(); };
+$("odawChk").onchange = e => { ivOdaw = e.target.checked ? 2.4 : 1.0; syncIvChips(); };
+$("wetChk").onchange = e => { ivWet = e.target.checked ? 2.2 : 1.0; syncIvChips(); };
 $("tideSlider").oninput = e => { ivTide = +e.target.value / 100;
   const v = +e.target.value;
   $("tideVal").textContent = v < 20 ? "low" : v < 75 ? "normal" : v < 115 ? "high" : "storm surge"; };
@@ -996,12 +1010,11 @@ function updateReadouts(force) {
   renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
   let flooded = 0;
   for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && conv0[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
+    if (!(maskU8[i] & 3) && convU8[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
   let bldWet = 0;
   for (let i = 0; i < nB; i++) {
-    if (demolished.has(i)) continue; // relocated off the floodplain
     const c = bCell[i];
-    if (!(maskU8[c] & 3) && conv0[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
+    if (!(maskU8[c] & 3) && convU8[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
   }
   const floodKm2 = flooded * CELL * CELL / 1e6;
   $("rFlood").textContent = floodKm2.toFixed(1) + " km²";
@@ -1390,11 +1403,10 @@ function floodStats(rt, buf) {
   renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, buf);
   let flooded = 0, bld = 0;
   for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && conv0[i] < 90 && buf[i * 4] > 0.25) flooded++;
+    if (!(maskU8[i] & 3) && convU8[i] < 90 && buf[i * 4] > 0.25) flooded++;
   for (let i = 0; i < nB; i++) {
-    if (demolished.has(i)) continue;
     const c = bCell[i];
-    if (!(maskU8[c] & 3) && conv0[c] < 90 && buf[c * 4] > 0.3) bld++;
+    if (!(maskU8[c] & 3) && convU8[c] < 90 && buf[c * 4] > 0.3) bld++;
   }
   return { km2: flooded * CELL * CELL / 1e6, bld };
 }
@@ -1407,13 +1419,23 @@ function updateCmpStat() {
     (cut > 0 ? ` &nbsp;·&nbsp; <span class="cut">${cut}% less flooding</span>` : "");
 }
 function positionWipe() { $("cmpWipe").style.left = (splitX * 100) + "%"; }
+let ivSaved = null;
+function cmpLabel() {
+  const parts = [];
+  const d = +$("drainSlider").value;
+  if (d >= 80) parts.push("drains cleared");
+  else if (d >= 40) parts.push("drains improved");
+  if ($("odawChk").checked) parts.push("Odaw dredged");
+  if ($("wetChk").checked) parts.push("wetlands restored");
+  return parts.join(" + ");
+}
 function enterCompare() {
   if (tourActive) endTour();
   if (chopperActive) exitChopper();
   compareMode = true; reviewMode = false; replayAnim = null;
-  $("drainSlider").value = 100; ivDrainMul = 1.0; $("drainVal").textContent = "100%";
-  $("odawChk").checked = true; ivOdaw = 2.4;
-  $("wetChk").checked = true; ivWet = 2.2;
+  ivSaved = { d: +$("drainSlider").value, o: $("odawChk").checked, w: $("wetChk").checked };
+  if (!cmpLabel()) setIv(100, true, true); // nothing chosen -> compare the full package
+  $("cmpTagR").textContent = cmpLabel();
   $("p2026").click(); simReset();
   raining = true; simRate = 210;
   document.querySelectorAll("#spdBtns button").forEach(x => x.classList.remove("on"));
@@ -1424,12 +1446,10 @@ function enterCompare() {
 }
 function exitCompare() {
   compareMode = false; raining = false; simRate = 150;
-  $("drainSlider").value = 18; ivDrainMul = 0.18; $("drainVal").textContent = "18%";
-  $("odawChk").checked = false; ivOdaw = 1.0;
-  $("wetChk").checked = false; ivWet = 1.0;
+  if (ivSaved) { setIv(ivSaved.d, ivSaved.o, ivSaved.w); ivSaved = null; }
   document.querySelectorAll("#spdBtns button").forEach(x => x.classList.toggle("on", x.dataset.s === "150"));
   $("btnRain").innerHTML = "&#9654; start storm"; $("btnRain").classList.remove("on");
-  $("cmpBtn").classList.remove("on"); $("cmpBtn").innerHTML = "&#8646; Compare: today vs. fixed";
+  $("cmpBtn").classList.remove("on"); $("cmpBtn").innerHTML = "&#8646; Compare: today vs. your fixes";
   for (const el of ["cmpWipe", "cmpTagL", "cmpTagR", "cmpStat"]) $(el).style.display = "none";
   renderer.setViewport(0, 0, innerWidth, innerHeight);
 }
@@ -1442,216 +1462,6 @@ $("cmpWipe").addEventListener("pointerdown", e => {
   $("cmpWipe").addEventListener("pointermove", mv);
   $("cmpWipe").addEventListener("pointerup", up);
 });
-
-// ---------- engineering mode: live terrain / drainage / demolition editing ----------
-const elev0 = elev.slice(), conv0 = convU8.slice();
-const works = new Uint8Array(GN * GN); // painted surface per cell (drives terrain tint)
-const demolished = new Set();
-const engStrokes = [];
-let engTool = null, engStroke = null, engCost = 0, engCleared = 0, engBrushR = 2;
-const ENG = {
-  drain:   { hint: "Storm drain — buried pipe that pulls water out of the grid. Paint a line.",
-             costCell: 55000, ring: 0xe8590c, code: 60 },
-  channel: { hint: "Open channel — dig a 2 m diversion so water routes where you want it.",
-             costCell: 28000, ring: 0x1d6fd1, code: 120 },
-  levee:   { hint: "Levee wall — raise a 3 m earth wall. Dam water out… or in. Careful.",
-             costCell: 18000, ring: 0x8a6202, code: 180 },
-  basin:   { hint: "Retention basin — excavate storage upstream so the peak never arrives.",
-             costCell: 35000, ring: 0x1d6fd1, code: 240 },
-  clear:   { hint: "Clear buildings — relocate structures off the floodplain. They leave the risk count.",
-             costCell: 9000, ring: 0xa32d2d },
-};
-function setWorks(idx, code, st) {
-  if (!st.works.has(idx)) st.works.set(idx, works[idx]);
-  works[idx] = code; auxData[idx * 4 + 3] = code;
-}
-const stampPulse = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40),
-  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0,
-    depthWrite: false, side: THREE.DoubleSide }));
-stampPulse.rotation.x = -Math.PI / 2; stampPulse.renderOrder = 9;
-scene.add(stampPulse);
-let pulseT = -1;
-function firePulse(gi, gj, hex) {
-  const mx = (gi + 0.5) * CELL, my = (gj + 0.5) * CELL;
-  stampPulse.material.color.setHex(hex);
-  stampPulse.position.set(mx - HALF, groundAt(mx, my) + 3, HALF - my);
-  pulseT = 0;
-}
-const brushRing = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 48),
-  new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.85,
-    depthWrite: false, side: THREE.DoubleSide }));
-brushRing.rotation.x = -Math.PI / 2; brushRing.renderOrder = 8; brushRing.visible = false;
-scene.add(brushRing);
-const engRay = new THREE.Raycaster();
-const _ndc = new THREE.Vector2();
-function pickGround(clientX, clientY) {
-  _ndc.set(clientX / innerWidth * 2 - 1, -(clientY / innerHeight) * 2 + 1);
-  engRay.setFromCamera(_ndc, camera);
-  const ro = engRay.ray.origin, rd = engRay.ray.direction;
-  let t = 10, lastAbove = 10;
-  for (let i = 0; i < 700; i++) {
-    t += 34;
-    const x = ro.x + rd.x * t, y = ro.y + rd.y * t, z = ro.z + rd.z * t;
-    if (t > 65000 || y < -80) return null;
-    const mx = x + HALF, my = HALF - z;
-    if (mx < 0 || my < 0 || mx > SPAN || my > SPAN) continue;
-    if (y <= groundAt(mx, my)) {
-      let lo = lastAbove, hi = t;
-      for (let j = 0; j < 12; j++) {
-        const mid = (lo + hi) / 2;
-        const mmx = ro.x + rd.x * mid + HALF, mmy = HALF - (ro.z + rd.z * mid);
-        (ro.y + rd.y * mid <= groundAt(
-          Math.min(SPAN, Math.max(0, mmx)), Math.min(SPAN, Math.max(0, mmy)))) ? hi = mid : lo = mid;
-      }
-      const fx = ro.x + rd.x * hi, fz = ro.z + rd.z * hi;
-      const fmx = Math.min(SPAN - 1, Math.max(0, fx + HALF)),
-            fmy = Math.min(SPAN - 1, Math.max(0, HALF - fz));
-      return { mx: fmx, my: fmy, gi: fmx / CELL | 0, gj: fmy / CELL | 0 };
-    }
-    lastAbove = t;
-  }
-  return null;
-}
-function fmtCost(v) {
-  if (v < 1000) return "$" + Math.round(v);
-  return v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3) + "k";
-}
-function engStampCells(gi, gj, r, fn) {
-  const R = Math.ceil(r);
-  for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
-    const d = Math.hypot(di, dj);
-    if (d > r + 0.45) continue;
-    const i2 = gi + di, j2 = gj + dj;
-    if (i2 < 0 || j2 < 0 || i2 >= GN || j2 >= GN) continue;
-    fn(j2 * GN + i2, Math.max(0.12, 1 - (d / (r + 0.5)) ** 2));
-  }
-}
-function engStamp(tool, gi, gj, r) {
-  const st = engStroke;
-  if (tool !== "clear") firePulse(gi, gj, ENG[tool].ring);
-  if (tool === "levee" || tool === "channel" || tool === "basin") {
-    const amp = tool === "levee" ? 3.2 : tool === "channel" ? -2.0 : -2.8;
-    const rr = tool === "basin" ? r + 1.5 : r;
-    engStampCells(gi, gj, rr, (idx, f) => {
-      if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); st.cost += ENG[tool].costCell; }
-      elev[idx] += amp * f;
-      // cap within a stroke so dwelling in place doesn't stack infinitely
-      elev[idx] = tool === "levee"
-        ? Math.min(st.elev.get(idx) + amp, elev[idx])
-        : Math.max(st.elev.get(idx) + amp, elev[idx]);
-      if (f > 0.3) setWorks(idx, ENG[tool].code, st);
-    });
-    terrTex.needsUpdate = true; auxTex.needsUpdate = true;
-  } else if (tool === "drain") {
-    engStampCells(gi, gj, r, (idx, f) => {
-      if (f < 0.3) return;
-      if (!st.conv.has(idx)) { st.conv.set(idx, convU8[idx]); st.cost += ENG.drain.costCell; }
-      if (convU8[idx] < 150) { convU8[idx] = 150; auxData[idx * 4] = 150; }
-      if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); elev[idx] -= 0.25; }
-      setWorks(idx, ENG.drain.code, st);
-    });
-    auxTex.needsUpdate = true; terrTex.needsUpdate = true;
-  } else if (tool === "clear") {
-    const rad = (r + 0.5) * CELL, rad2 = rad * rad, mx = (gi + 0.5) * CELL, my = (gj + 0.5) * CELL;
-    let minV = Infinity, maxV = 0;
-    for (let b = 0; b < nB; b++) {
-      if (demolished.has(b)) continue;
-      const dx = bMxA[b] - mx, dy = bMyA[b] - my;
-      if (dx * dx + dy * dy > rad2) continue;
-      const a = cumV[b] | 0, e = cumV[b + 1] | 0;
-      st.blds.push({ b, data: posA.slice(a * 3, e * 3) });
-      for (let k = a * 3; k < e * 3; k += 3) { posA[k] = 0; posA[k + 1] = -900; posA[k + 2] = 0; }
-      demolished.add(b); engCleared++; st.cost += ENG.clear.costCell;
-      if (a < minV) minV = a; if (e > maxV) maxV = e;
-    }
-    if (maxV > 0) {
-      const attr = bGeo.getAttribute("position");
-      attr.updateRange = { offset: minV * 3, count: (maxV - minV) * 3 };
-      attr.needsUpdate = true;
-    }
-  }
-}
-function engUpdateUI() {
-  $("engCostV").textContent = fmtCost(engCost + (engStroke ? engStroke.cost : 0));
-  $("engClrV").textContent = engCleared.toLocaleString();
-}
-function armTool(t) {
-  engTool = engTool === t ? null : t;
-  document.querySelectorAll(".engT").forEach(b =>
-    b.classList.toggle("on", b.dataset.tool === engTool));
-  controls.enableRotate = !engTool;
-  brushRing.visible = false;
-  $("engHint").textContent = engTool ? ENG[engTool].hint
-    : "Camera rotate pauses while a tool is armed — right-drag still pans, scroll zooms.";
-  if (engTool) brushRing.material.color.setHex(ENG[engTool].ring);
-}
-document.querySelectorAll(".engT").forEach(b => b.onclick = () => armTool(b.dataset.tool));
-$("engBrush").oninput = e => engBrushR = +e.target.value;
-let lastStampMx = 1e9, lastStampMy = 1e9;
-renderer.domElement.addEventListener("pointerdown", e => {
-  if (!engTool || e.button !== 0 || chopperActive) return;
-  const p = pickGround(e.clientX, e.clientY);
-  if (!p) return;
-  e.preventDefault();
-  engStroke = { tool: engTool, elev: new Map(), conv: new Map(), works: new Map(),
-    blds: [], cost: 0 };
-  lastStampMx = 1e9;
-  engStamp(engTool, p.gi, p.gj, engBrushR);
-  lastStampMx = p.mx; lastStampMy = p.my;
-  engUpdateUI();
-  renderer.domElement.setPointerCapture(e.pointerId);
-});
-renderer.domElement.addEventListener("pointermove", e => {
-  if (!engTool || chopperActive) return;
-  const p = pickGround(e.clientX, e.clientY);
-  if (!p) { brushRing.visible = false; return; }
-  brushRing.visible = true;
-  brushRing.position.set(p.mx - HALF, groundAt(p.mx, p.my) + 2.5, HALF - p.my);
-  brushRing.scale.setScalar((engBrushR + 0.5) * CELL);
-  if (!engStroke) return;
-  if (Math.hypot(p.mx - lastStampMx, p.my - lastStampMy) < CELL * 0.7) return;
-  engStamp(engStroke.tool, p.gi, p.gj, engBrushR);
-  lastStampMx = p.mx; lastStampMy = p.my;
-  engUpdateUI();
-});
-addEventListener("pointerup", () => {
-  if (!engStroke) return;
-  if (engStroke.cost > 0 || engStroke.blds.length) {
-    engStrokes.push(engStroke); engCost += engStroke.cost;
-  }
-  engStroke = null; engUpdateUI();
-});
-function engRestoreStroke(st) {
-  for (const [idx, v] of st.elev) elev[idx] = v;
-  for (const [idx, v] of st.conv) { convU8[idx] = v; auxData[idx * 4] = v; }
-  for (const [idx, v] of st.works) { works[idx] = v; auxData[idx * 4 + 3] = v; }
-  let minV = Infinity, maxV = 0;
-  for (const { b, data } of st.blds) {
-    const a = cumV[b] | 0;
-    posA.set(data, a * 3);
-    demolished.delete(b); engCleared--;
-    if (a < minV) minV = a; if (a + data.length / 3 > maxV) maxV = a + data.length / 3;
-  }
-  if (maxV > 0) {
-    const attr = bGeo.getAttribute("position");
-    attr.updateRange = { offset: minV * 3, count: (maxV - minV) * 3 };
-    attr.needsUpdate = true;
-  }
-  if (st.elev.size) terrTex.needsUpdate = true;
-  if (st.conv.size || st.works.size) auxTex.needsUpdate = true;
-}
-$("engUndo").onclick = () => {
-  const st = engStrokes.pop();
-  if (!st) return;
-  engRestoreStroke(st); engCost -= st.cost; engUpdateUI();
-};
-$("engReset").onclick = () => {
-  while (engStrokes.length) engRestoreStroke(engStrokes.pop());
-  elev.set(elev0); convU8.set(conv0); works.fill(0);
-  for (let i = 0; i < GN * GN; i++) { auxData[i * 4] = convU8[i]; auxData[i * 4 + 3] = 0; }
-  terrTex.needsUpdate = true; auxTex.needsUpdate = true;
-  engCost = 0; engCleared = 0; demolished.clear(); engUpdateUI();
-};
 
 // ---------- guided tour ----------
 const TOUR = [
@@ -1932,6 +1742,19 @@ addEventListener("keydown", e => {
   togglePanel();
 });
 
+// ---------- collapsible panel sections ----------
+for (const sec of document.querySelectorAll("#panel .sec")) {
+  const t = sec.querySelector(".t");
+  const body = document.createElement("div"); body.className = "secBody";
+  while (t.nextSibling) body.appendChild(t.nextSibling);
+  sec.appendChild(body);
+  t.onclick = () => {
+    sec.classList.toggle("closed");
+    if (!sec.classList.contains("closed") && sec.contains(tl)) { sizeTL(); drawTL(); }
+  };
+  if (/^(Look|Forecast)/i.test(t.textContent.trim())) sec.classList.add("closed");
+}
+
 // ---------- animate ----------
 sizeTL();
 simReset();
@@ -1998,15 +1821,6 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
-  if (pulseT >= 0) {
-    pulseT += dt;
-    const k = pulseT / 0.5;
-    if (k >= 1) { pulseT = -1; stampPulse.material.opacity = 0; }
-    else {
-      stampPulse.scale.setScalar((engBrushR + 0.5) * CELL * (1 + k * 1.6));
-      stampPulse.material.opacity = 0.85 * (1 - k);
-    }
-  }
   if (chopperActive) updateChopper(dt);
   if (tourActive) {
     tourStopT += dt;
@@ -2071,20 +1885,6 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   startTour, endTour, tourState: () => ({ active: tourActive, idx: tourIdx }),
   enterCompare, exitCompare, floodStats,
   cmpState: () => ({ compare: compareMode, splitX, drain: ivDrainMul, odaw: ivOdaw, wet: ivWet }),
-  eng: {
-    arm: armTool,
-    stamp: (tool, gi, gj, r) => {
-      engStroke = { tool, elev: new Map(), conv: new Map(), works: new Map(),
-        blds: [], cost: 0 };
-      engStamp(tool, gi, gj, r || engBrushR);
-      engStrokes.push(engStroke); engCost += engStroke.cost;
-      engStroke = null; engUpdateUI();
-    },
-    undo: () => $("engUndo").click(),
-    reset: () => $("engReset").click(),
-    state: () => ({ tool: engTool, strokes: engStrokes.length, cost: engCost,
-      cleared: engCleared }),
-  },
   enterChopper, exitChopper,
   chopState: () => ({ active: chopperActive, t: chopT, stops: chopStops.length,
     camY: camera.position.y.toFixed(0) }),
@@ -2110,7 +1910,7 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
       if (maskU8[i] & 3) continue;
       const d = readBuf[i * 4];
       vol += d;
-      if (conv0[i] >= 90) continue; // in-channel water is not street flooding
+      if (convU8[i] >= 90) continue; // in-channel water is not street flooding
       if (d > mx) { mx = d; mi = i; }
       if (d > 0.25) n25++;
       if (d > 0.05) n05++;
