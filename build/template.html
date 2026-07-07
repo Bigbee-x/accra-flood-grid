@@ -99,9 +99,13 @@
   .risk.lo { background:#e3eedd; color:#3d6b2a; }
   #tourBtn { width:100%; box-sizing:border-box; margin:2px 0 6px; font-weight:600;
     background:#fdeee0; border-color:#e8590c; color:#a13c05; padding:7px; font-size:12.5px; }
-  #chopBtn { width:100%; box-sizing:border-box; margin:0 0 10px; font-weight:600;
-    background:#eef1f4; border-color:#7d8794; color:#3f4854; padding:7px; font-size:12.5px; }
-  #chopBtn.on { background:#e7ecf1; border-color:#3f4854; }
+  #toast { position:fixed; top:46%; left:50%; transform:translate(-50%,-50%) scale(.92);
+    z-index:40; padding:14px 26px; border-radius:14px; background:rgba(31,27,22,.9);
+    color:#ffe9d6; font:600 16px "Helvetica Neue",Helvetica,Arial,sans-serif;
+    box-shadow:0 8px 34px rgba(0,0,0,.32); opacity:0; pointer-events:none; text-align:center;
+    transition:opacity .45s ease, transform .45s ease; }
+  #toast.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #toast small { display:block; font-weight:400; font-size:12px; color:#e8a97e; margin-top:4px; }
   #chopCap { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:24;
     display:none; padding:9px 18px 10px; border-radius:12px; background:rgba(252,250,245,.95);
     border:1px solid #d8cec0; box-shadow:0 3px 16px rgba(80,65,45,.22); text-align:center;
@@ -169,7 +173,6 @@
     <div id="qRes"></div>
   </div>
   <button id="tourBtn">&#9654; Guided tour of the flood</button>
-  <button id="chopBtn">&#9992; Aerial chopper tour</button>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -299,6 +302,7 @@
   <div id="chopKeys"><b>W</b>/<b>S</b> forward &middot; back &nbsp; <b>A</b>/<b>D</b> turn
     &nbsp; <b>&uarr;</b>/<b>&darr;</b> climb &middot; descend</div>
 </div>
+<div id="toast"></div>
 
 <div id="cmpTagL" class="cmpTag">Drains clogged — today</div>
 <div id="cmpTagR" class="cmpTag">Drains cleared + Odaw dredged</div>
@@ -1503,7 +1507,7 @@ chopShadow.rotation.x = -Math.PI / 2; chopShadow.visible = false; chopShadow.ren
 scene.add(chopShadow);
 
 // flight path: a smooth loop through the hotspots at cruising altitude
-const CHOP_ALT = 340, CHASE_BACK = 78, CHASE_UP = 30, CHASE_AHEAD = 70;
+const CHOP_ALT = 340, CHASE_BACK = 82, CHASE_UP = 26, CHASE_AHEAD = 58;
 const chopRoute = ["Kwame Nkrumah Circle", "Alajo", "Christian Village",
                    "Kaneshie", "Old Fadama", "Agbogbloshie"];
 const chopStops = chopRoute.map(n => {
@@ -1538,28 +1542,32 @@ function chopGround() {
   return groundAt(Math.min(SPAN, Math.max(0, mgx)), Math.min(SPAN, Math.max(0, mgz)));
 }
 function updateChopper(dt) {
-  mainRotor.rotation.y += 26 * dt; tailRotor.rotation.x += 34 * dt;
+  mainRotor.rotation.y += 40 * dt; tailRotor.rotation.x += 48 * dt;
+  const t = uTime.value;
   let yawRate = 0;
   if (chopMode === "auto") {
-    chopT = (chopT + chopSpeed * dt) % 1;
+    const spd = chopSpeed * (0.9 + 0.16 * Math.sin(t * 0.25)); // breathe the cruise speed
+    chopT = (chopT + spd * dt) % 1;
     chopCurve.getPointAt(chopT, chopPos);
     chopCurve.getTangentAt(chopT, chopFwd);
     const ny = Math.atan2(chopFwd.x, chopFwd.z);
     yawRate = Math.atan2(Math.sin(ny - prevYaw), Math.cos(ny - prevYaw)) / Math.max(dt, 0.001);
     prevYaw = ny;
-    chopPos.y += Math.sin(uTime.value * 1.1) * 2.5;
+    _right.copy(chopFwd).cross(chopUp).normalize();
+    chopPos.addScaledVector(_right, Math.sin(t * 0.6) * 9);          // wind drift
+    chopPos.y += Math.sin(t * 0.8) * 4.5 + Math.sin(t * 1.9) * 1.4;  // float
   } else {
     const kf = (keys["w"] ? 1 : 0) - (keys["s"] ? 1 : 0);
     const kyaw = (keys["a"] ? 1 : 0) - (keys["d"] ? 1 : 0);
     const kc = (keys["arrowup"] ? 1 : 0) - (keys["arrowdown"] ? 1 : 0)
              + (keys["e"] ? 1 : 0) - (keys["q"] ? 1 : 0);
-    yawRate = kyaw * 1.1;
+    yawRate = kyaw * 1.25;
     chopYaw += yawRate * dt;
     chopFwd.set(Math.sin(chopYaw), 0, Math.cos(chopYaw));
-    chopSpeedFwd += (kf * 260 - chopSpeedFwd) * Math.min(1, dt * 1.4);
-    chopClimb += (kc * 150 - chopClimb) * Math.min(1, dt * 2.2);
+    chopSpeedFwd += (kf * 300 - chopSpeedFwd) * Math.min(1, dt * 1.7);
+    chopClimb += (kc * 175 - chopClimb) * Math.min(1, dt * 2.6);
     chopPos.addScaledVector(chopFwd, chopSpeedFwd * dt);
-    chopPos.y += chopClimb * dt;
+    chopPos.y += chopClimb * dt + Math.sin(t * 1.8) * 1.1;           // idle hover
     chopPos.x = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.x));
     chopPos.z = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.z));
     chopPos.y = Math.max(chopGround() + 70, Math.min(3600, chopPos.y));
@@ -1571,21 +1579,23 @@ function updateChopper(dt) {
   _basis.makeBasis(_xA, _yA, _zA);
   chopper.position.copy(chopPos);
   chopper.quaternion.setFromRotationMatrix(_basis);
-  const bankTarget = Math.max(-0.6, Math.min(0.6, yawRate * 0.5));
+  const sway = chopMode === "auto" ? Math.sin(t * 0.6) * 0.05 : 0;
+  const bankTarget = Math.max(-0.7, Math.min(0.7, yawRate * 0.6 + sway));
   bankNow += (bankTarget - bankNow) * Math.min(1, dt * 3);
   const pitchTarget = chopMode === "manual"
-    ? Math.max(-0.22, Math.min(0.22, -chopSpeedFwd / 260 * 0.2)) : -0.05;
+    ? Math.max(-0.24, Math.min(0.24, -chopSpeedFwd / 300 * 0.24)) : -0.06;
   pitchNow += (pitchTarget - pitchNow) * Math.min(1, dt * 3);
   chopper.rotateZ(bankNow); chopper.rotateX(pitchNow);
   const g = chopGround();
   chopShadow.position.set(chopPos.x, g + 2, chopPos.z);
   chopShadow.scale.setScalar(Math.max(0.6, 1 + (chopPos.y - g) / 850));
   _right.copy(chopFwd).cross(chopUp).normalize();
-  const s = 1 - Math.pow(0.0016, dt);
+  const s = 1 - Math.pow(0.0022, dt);
   _camWant.copy(chopPos).addScaledVector(chopFwd, -CHASE_BACK).addScaledVector(chopUp, CHASE_UP)
     .addScaledVector(_right, -CHASE_SIDE);
+  _camWant.x += Math.sin(t * 1.3) * 2.4; _camWant.y += Math.sin(t * 1.9 + 1) * 1.7; // handheld
   camera.position.lerp(_camWant, s);
-  _lookWant.copy(chopPos).addScaledVector(chopFwd, CHASE_AHEAD).addScaledVector(chopUp, -14)
+  _lookWant.copy(chopPos).addScaledVector(chopFwd, CHASE_AHEAD).addScaledVector(chopUp, -22)
     .addScaledVector(_right, -CHASE_SIDE);
   _lookNow.lerp(_lookWant, s);
   camera.up.set(0, 1, 0); camera.lookAt(_lookNow);
@@ -1608,7 +1618,10 @@ function setChopMode(m) {
   chopMode = m;
   $("chopAuto").classList.toggle("on", m === "auto");
   $("chopManual").classList.toggle("on", m === "manual");
-  $("chopKeys").style.display = m === "manual" ? "block" : "none";
+  $("chopKeys").innerHTML = m === "manual"
+    ? "<b>W</b>/<b>S</b> fly &middot; <b>A</b>/<b>D</b> turn &middot; <b>&uarr;</b>/<b>&darr;</b> climb &middot; <b>Esc</b> land"
+    : "<b>Esc</b> to land &middot; switch to manual to fly it yourself";
+  $("chopKeys").style.display = "block";
 }
 function enterChopper() {
   if (compareMode) exitCompare();
@@ -1616,7 +1629,6 @@ function enterChopper() {
   reviewMode = false; replayAnim = null; flyTween = null;
   chopperActive = true; controls.enabled = false;
   chopper.visible = true; chopShadow.visible = true;
-  $("chopBtn").innerHTML = "&#10005; Land the chopper"; $("chopBtn").classList.add("on");
   $("chopCap").style.display = "block";
   setChopMode("auto");
   if (!raining) { $("p2026").click(); simReset(); raining = true; simRate = 150;
@@ -1627,14 +1639,35 @@ function exitChopper() {
   chopperActive = false; controls.enabled = true;
   chopper.visible = false; chopShadow.visible = false;
   controls.target.copy(camera.position)
-    .addScaledVector(camera.getWorldDirection(_t2), 2600);
+    .addScaledVector(camera.getWorldDirection(_right), 2600);
   controls.target.y = 0; // keep the orbit pivot at ground level
-  $("chopBtn").innerHTML = "&#9992; Aerial chopper tour"; $("chopBtn").classList.remove("on");
   $("chopCap").style.display = "none";
 }
-$("chopBtn").onclick = () => chopperActive ? exitChopper() : enterChopper();
 $("chopAuto").onclick = () => setChopMode("auto");
 $("chopManual").onclick = () => setChopMode("manual");
+
+// secret trigger — the Konami code launches the "presidential flyover" (Esc lands it)
+const KONAMI = ["arrowup", "arrowup", "arrowdown", "arrowdown",
+                "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
+let konamiIdx = 0, toastTmr = null;
+function showToast(html, ms) {
+  $("toast").innerHTML = html; $("toast").classList.add("show");
+  clearTimeout(toastTmr); toastTmr = setTimeout(() => $("toast").classList.remove("show"), ms || 2800);
+}
+addEventListener("keydown", e => {
+  if (chopperActive) { if (e.key === "Escape") exitChopper(); return; }
+  if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  konamiIdx = k === KONAMI[konamiIdx] ? konamiIdx + 1 : (k === KONAMI[0] ? 1 : 0);
+  if (konamiIdx === KONAMI.length) {
+    konamiIdx = 0;
+    showToast("Presidential flyover<small>aerial flood survey engaged &middot; Esc to land</small>", 3400);
+    enterChopper();
+  }
+});
+console.log("%cAccra // flood grid", "color:#e8590c;font-weight:bold;font-size:14px");
+console.log("%cpsst — the president's flood flyover is hidden in here. try a classic cheat code.",
+  "color:#8b8071");
 
 // hide / show the control panel (button + H key) — for a clean view / recording
 function togglePanel(force) {
