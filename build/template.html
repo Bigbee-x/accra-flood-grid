@@ -90,8 +90,18 @@
   .risk.hi { background:#fbe0d2; color:#a13c05; }
   .risk.md { background:#faedd2; color:#8a6202; }
   .risk.lo { background:#e3eedd; color:#3d6b2a; }
-  #tourBtn { width:100%; box-sizing:border-box; margin:2px 0 10px; font-weight:600;
+  #tourBtn { width:100%; box-sizing:border-box; margin:2px 0 6px; font-weight:600;
     background:#fdeee0; border-color:#e8590c; color:#a13c05; padding:7px; font-size:12.5px; }
+  #chopBtn { width:100%; box-sizing:border-box; margin:0 0 10px; font-weight:600;
+    background:#eef1f4; border-color:#7d8794; color:#3f4854; padding:7px; font-size:12.5px; }
+  #chopBtn.on { background:#e7ecf1; border-color:#3f4854; }
+  #chopCap { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:24;
+    display:none; padding:8px 20px; border-radius:11px; background:rgba(252,250,245,.94);
+    border:1px solid #d8cec0; box-shadow:0 3px 16px rgba(80,65,45,.22); text-align:center;
+    font:"Helvetica Neue",Helvetica,Arial,sans-serif; }
+  #chopCap .n { font-size:16px; font-weight:600; color:#1f1b16; letter-spacing:.2px; }
+  #chopCap .s { font-size:11.5px; color:#a13c05; margin-top:1px; }
+  #chopCap .k { font-size:10px; color:#a09280; text-transform:uppercase; letter-spacing:1px; }
   #tour { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:25;
     width:min(580px,92vw); box-sizing:border-box; background:rgba(252,250,245,.96);
     border:1px solid #d8cec0; border-radius:12px; box-shadow:0 4px 22px rgba(80,65,45,.22);
@@ -145,6 +155,7 @@
     <div id="qRes"></div>
   </div>
   <button id="tourBtn">&#9654; Guided tour of the flood</button>
+  <button id="chopBtn">&#9992; Aerial chopper tour</button>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
 
@@ -263,6 +274,12 @@
     <button id="tourNext">next &#8250;</button>
     <button id="tourExit">exit tour</button>
   </div>
+</div>
+
+<div id="chopCap">
+  <div class="k">now flying over</div>
+  <div class="n" id="chopName">Accra</div>
+  <div class="s" id="chopSub">Odaw basin</div>
 </div>
 
 <div id="cmpTagL" class="cmpTag">Drains clogged — today</div>
@@ -1330,6 +1347,7 @@ function updateCmpStat() {
 function positionWipe() { $("cmpWipe").style.left = (splitX * 100) + "%"; }
 function enterCompare() {
   if (tourActive) endTour();
+  if (chopperActive) exitChopper();
   compareMode = true; reviewMode = false; replayAnim = null;
   $("drainSlider").value = 100; ivDrainMul = 1.0; $("drainVal").textContent = "100%";
   $("odawChk").checked = true; ivOdaw = 2.4;
@@ -1389,6 +1407,7 @@ function tourStop() {
 }
 function startTour() {
   if (compareMode) exitCompare();
+  if (chopperActive) exitChopper();
   $("btnReset").click(); $("p2026").click();
   reviewMode = false; $("tlLive").classList.add("on");
   raining = true; simRate = 210; // paces the 6-stop tour to finish near peak (~T+2.5h)
@@ -1415,6 +1434,133 @@ $("tourNext").onclick = () => tourStop();
 $("tourPrev").onclick = () => { tourIdx = Math.max(-1, tourIdx - 2); tourStop(); };
 $("tourExit").onclick = () => endTour();
 
+// ---------- aerial chopper tour ----------
+scene.add(new THREE.AmbientLight(0xfff4e6, 0.6));
+const chopSun = new THREE.DirectionalLight(0xfff0dd, 0.75);
+chopSun.position.set(-1400, 2200, -1700); scene.add(chopSun);
+
+const chopper = new THREE.Group();
+function chopPart(w, h, d, color, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color }));
+  m.position.set(x, y, z); chopper.add(m); return m;
+}
+chopPart(6.5, 6, 13, 0xe9e1d2, 0, 0, 0);            // body (nose toward -Z)
+chopPart(6.6, 2.6, 12, 0xcabda6, 0, -2.5, 0);        // belly
+const chopNoseMesh = new THREE.Mesh(new THREE.SphereGeometry(3.3, 16, 12),
+  new THREE.MeshLambertMaterial({ color: 0xe9e1d2 }));
+chopNoseMesh.scale.set(1, 0.92, 1.15); chopNoseMesh.position.set(0, 0, -6.6);
+chopper.add(chopNoseMesh);
+chopPart(5.4, 3, 3.2, 0x2b3a44, 0, 1.3, -5.2);       // windshield
+chopPart(6.7, 1.1, 9, 0xe8590c, 0, 2.0, 0);          // orange band
+chopPart(1.6, 1.6, 13, 0xe0d7c6, 0, 0.6, 9.6);       // tail boom
+chopPart(0.8, 5, 3, 0xe0d7c6, 0, 2.7, 15.2);         // tail fin
+chopPart(5, 0.6, 2, 0xe0d7c6, 0, 0.6, 15);           // stabiliser
+chopPart(0.7, 0.7, 12.5, 0x3a352d, 2.7, -4.7, 0);    // skid R
+chopPart(0.7, 0.7, 12.5, 0x3a352d, -2.7, -4.7, 0);   // skid L
+for (const sx of [-2.5, 2.5]) for (const sz of [-3.5, 3.5])
+  chopPart(0.5, 3.2, 0.5, 0x3a352d, sx, -3.1, sz);   // struts
+chopPart(0.5, 3, 0.5, 0x3a352d, 0, 2.4, 0);          // mast
+const mainRotor = new THREE.Group(); mainRotor.position.set(0, 4.1, 0);
+mainRotor.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.1, 12),
+  new THREE.MeshLambertMaterial({ color: 0x2e2a24 })));
+for (const rot of [0, Math.PI / 2]) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(26, 0.22, 1.2),
+    new THREE.MeshLambertMaterial({ color: 0x2e2a24 }));
+  b.rotation.y = rot; mainRotor.add(b);
+}
+chopper.add(mainRotor);
+const tailRotor = new THREE.Group(); tailRotor.position.set(1.0, 2.6, 15.4);
+for (const rot of [0, Math.PI / 2]) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5, 0.8),
+    new THREE.MeshLambertMaterial({ color: 0x2e2a24 }));
+  b.rotation.x = rot; tailRotor.add(b);
+}
+chopper.add(tailRotor);
+chopper.scale.setScalar(1.3); chopper.visible = false; scene.add(chopper);
+const chopShadow = new THREE.Mesh(new THREE.CircleGeometry(20, 32),
+  new THREE.MeshBasicMaterial({ color: 0x1c140a, transparent: true, opacity: 0.16,
+    depthWrite: false }));
+chopShadow.rotation.x = -Math.PI / 2; chopShadow.visible = false; chopShadow.renderOrder = 4;
+scene.add(chopShadow);
+
+// flight path: a smooth loop through the hotspots at cruising altitude
+const CHOP_ALT = 340, CHASE_BACK = 78, CHASE_UP = 30, CHASE_AHEAD = 70;
+const chopRoute = ["Kwame Nkrumah Circle", "Alajo", "Christian Village",
+                   "Kaneshie", "Old Fadama", "Agbogbloshie"];
+const chopStops = chopRoute.map(n => {
+  const p = places.find(q => q.n.toLowerCase() === n.toLowerCase());
+  return p ? { n: p.n, aff: p.aff, v: new THREE.Vector3(p.wx, p.gy + CHOP_ALT, p.wz) } : null;
+}).filter(Boolean);
+const chopCurve = new THREE.CatmullRomCurve3(chopStops.map(s => s.v), true, "catmullrom", 0.4);
+let chopperActive = false, chopT = 0;
+const chopSpeed = 1 / 95, chopUp = new THREE.Vector3(0, 1, 0);
+const _cp = new THREE.Vector3(), _cf = new THREE.Vector3(), _prevF = new THREE.Vector3(),
+      _camWant = new THREE.Vector3(), _lookWant = new THREE.Vector3(),
+      _lookNow = new THREE.Vector3(), _cross = new THREE.Vector3(), _t2 = new THREE.Vector3(),
+      _right = new THREE.Vector3();
+const CHASE_SIDE = 46; // push the chopper right of the control panel
+let bankNow = 0;
+chopCurve.getTangentAt(0, _prevF);
+chopCurve.getPointAt(0, _lookNow);
+function updateChopper(dt) {
+  mainRotor.rotation.y += 26 * dt; tailRotor.rotation.x += 34 * dt;
+  chopT = (chopT + chopSpeed * dt) % 1;
+  chopCurve.getPointAt(chopT, _cp);
+  chopCurve.getTangentAt(chopT, _cf);
+  chopper.position.set(_cp.x, _cp.y + Math.sin(uTime.value * 1.5) * 3.5, _cp.z);
+  _t2.copy(_cp).add(_cf); chopper.lookAt(_t2);
+  const signedTurn = chopUp.dot(_cross.copy(_prevF).cross(_cf));
+  const bankTarget = Math.max(-0.5, Math.min(0.5, signedTurn * 16));
+  bankNow += (bankTarget - bankNow) * Math.min(1, dt * 2.5);
+  chopper.rotateZ(bankNow); chopper.rotateX(0.05);
+  _prevF.copy(_cf);
+  const mgx = chopper.position.x + HALF, mgz = HALF - chopper.position.z;
+  const g = groundAt(Math.min(SPAN, Math.max(0, mgx)), Math.min(SPAN, Math.max(0, mgz)));
+  chopShadow.position.set(chopper.position.x, g + 2, chopper.position.z);
+  chopShadow.scale.setScalar(Math.max(0.6, 1 + (chopper.position.y - g) / 850));
+  const s = 1 - Math.pow(0.0016, dt);
+  _right.copy(_cf).cross(chopUp).normalize(); // chopper's right in screen space
+  _camWant.copy(_cp).addScaledVector(_cf, -CHASE_BACK).addScaledVector(chopUp, CHASE_UP)
+    .addScaledVector(_right, -CHASE_SIDE);
+  camera.position.lerp(_camWant, s);
+  _lookWant.copy(_cp).addScaledVector(_cf, CHASE_AHEAD).addScaledVector(chopUp, -14)
+    .addScaledVector(_right, -CHASE_SIDE);
+  _lookNow.lerp(_lookWant, s);
+  camera.up.set(0, 1, 0); camera.lookAt(_lookNow);
+  if (frame % 10 === 0) {
+    let nd = 1e18, ns = null;
+    for (const st of chopStops) {
+      const dx = st.v.x - chopper.position.x, dz = st.v.z - chopper.position.z, d = dx * dx + dz * dz;
+      if (d < nd) { nd = d; ns = st; }
+    }
+    if (ns) { $("chopName").textContent = ns.n;
+      $("chopSub").textContent = ns.aff ? "flooded " + ns.aff.y : "Odaw basin"; }
+  }
+}
+function enterChopper() {
+  if (compareMode) exitCompare();
+  if (tourActive) endTour();
+  reviewMode = false; replayAnim = null; flyTween = null;
+  chopperActive = true; controls.enabled = false;
+  chopper.visible = true; chopShadow.visible = true;
+  $("chopBtn").innerHTML = "&#10005; Land the chopper"; $("chopBtn").classList.add("on");
+  $("chopCap").style.display = "block";
+  if (!raining) { $("p2026").click(); simReset(); raining = true; simRate = 150;
+    document.querySelectorAll("#spdBtns button").forEach(x => x.classList.toggle("on", x.dataset.s === "150"));
+    $("btnRain").innerHTML = "&#9646;&#9646; pause storm"; $("btnRain").classList.add("on"); }
+}
+function exitChopper() {
+  chopperActive = false; controls.enabled = true;
+  chopper.visible = false; chopShadow.visible = false;
+  controls.target.copy(camera.position)
+    .addScaledVector(camera.getWorldDirection(_t2), 2600);
+  controls.target.y = 0; // keep the orbit pivot at ground level
+  $("chopBtn").innerHTML = "&#9992; Aerial chopper tour"; $("chopBtn").classList.remove("on");
+  $("chopCap").style.display = "none";
+}
+$("chopBtn").onclick = () => chopperActive ? exitChopper() : enterChopper();
+
 // ---------- animate ----------
 sizeTL();
 simReset();
@@ -1425,7 +1571,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.1);
   uTime.value += dt;
   uCam.value.copy(camera.position);
-  controls.update();
+  if (!chopperActive) controls.update();
   if (running && !reviewMode) {
     const hi = Math.floor(simClock / 3600);
     const active = raining && hi < storm.schedule.length;
@@ -1471,8 +1617,9 @@ function animate() {
     scene.background = bgCol;
     if (forecastRun && simClock >= (storm.schedule.length + 1) * 3600) finishForecast();
   }
-  rainMesh.position.set(controls.target.x, 0, controls.target.z);
-  if (flyTween) {
+  if (chopperActive) rainMesh.position.set(chopper.position.x, 0, chopper.position.z);
+  else rainMesh.position.set(controls.target.x, 0, controls.target.z);
+  if (flyTween && !chopperActive) {
     const k = Math.min((uTime.value - flyTween.t0) / flyTween.dur, 1);
     const e = k * k * (3 - 2 * k);
     controls.target.lerpVectors(flyTween.fromT, flyTween.toT, e);
@@ -1480,6 +1627,7 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
+  if (chopperActive) updateChopper(dt);
   if (tourActive) {
     tourStopT += dt;
     if (tourStopT > STOP_DUR) tourStop();
@@ -1543,6 +1691,9 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   startTour, endTour, tourState: () => ({ active: tourActive, idx: tourIdx }),
   enterCompare, exitCompare, floodStats,
   cmpState: () => ({ compare: compareMode, splitX, drain: ivDrainMul, odaw: ivOdaw, wet: ivWet }),
+  enterChopper, exitChopper,
+  chopState: () => ({ active: chopperActive, t: chopT, stops: chopStops.length,
+    camY: camera.position.y.toFixed(0) }),
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
     const i = gy * GN + gx;
