@@ -134,6 +134,10 @@
     font-variant-numeric:tabular-nums; }
   @media (max-width:520px){ #panel{ width:calc(100vw - 32px); } }
   .ivIntro { color:#4a4238; font-size:11.5px; line-height:1.5; margin:0 0 9px; }
+  .engT { position:relative; }
+  .engT.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; font-weight:600; }
+  #engRow2 { margin-top:0; }
+  #engCostV { color:#a13c05; font-weight:600; font-variant-numeric:tabular-nums; }
   .ivRow { margin:9px 0; }
   .ivHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
   .ivName { font-size:12.5px; color:#2b2620; }
@@ -257,6 +261,31 @@
     </div>
 
     <button id="cmpBtn">&#8646; Compare: today vs. fixed</button>
+  </div>
+
+  <div class="sec"><div class="t">Engineering mode</div>
+    <div class="ivIntro">Take the engineer's seat. Arm a tool, then <b>drag on the map</b> —
+      dig channels, raise levees, lay drains, clear the floodplain. The water reacts live.</div>
+    <div class="btns">
+      <button class="engT" data-tool="drain">Storm drain</button>
+      <button class="engT" data-tool="channel">Open channel</button>
+      <button class="engT" data-tool="levee">Levee wall</button>
+    </div>
+    <div class="btns" id="engRow2">
+      <button class="engT" data-tool="basin">Retention basin</button>
+      <button class="engT" data-tool="clear">Clear buildings</button>
+    </div>
+    <div class="row"><span class="muted">Brush size</span>
+      <input type="range" id="engBrush" min="1" max="5" value="2"></div>
+    <div class="row"><span class="muted">Works cost (indicative)</span>
+      <span class="val" id="engCostV">$0</span></div>
+    <div class="row"><span class="muted">Buildings cleared</span><span class="val" id="engClrV">0</span></div>
+    <div class="btns">
+      <button id="engUndo">&#8630; undo</button>
+      <button id="engReset">&#10005; clear all works</button>
+    </div>
+    <div class="note" id="engHint">Camera rotate pauses while a tool is armed — right-drag still pans,
+      scroll zooms. Click the armed tool again to disarm.</div>
   </div>
 
   <div class="sec"><div class="t">Look</div>
@@ -684,7 +713,8 @@ for (let i = 0; i < nB; i++) {
 }
 const posA = new Float32Array(totV * 3), colA = new Uint8Array(totV * 3),
       nrmA = new Int8Array(totV * 3);
-const cumV = new Float32Array(nB + 1), bCell = new Uint32Array(nB);
+const cumV = new Float32Array(nB + 1), bCell = new Uint32Array(nB),
+      bMxA = new Float32Array(nB), bMyA = new Float32Array(nB);
 const SUN = [-0.591, 0.806]; // normalized (-0.55, 0.75)
 function ramp(h) {
   const t = Math.min(Math.max(Math.log(Math.max(h, 2.5) / 2.5) / Math.log(70 / 2.5), 0), 1);
@@ -714,6 +744,7 @@ for (let oi = 0; oi < nB; oi++) {
   const base = groundAt(cx, cy) - 0.6, top = base + 0.6 + h;
   const gi = Math.min(GN - 1, cx / CELL | 0), gj = Math.min(GN - 1, cy / CELL | 0);
   bCell[oi] = gj * GN + gi;
+  bMxA[oi] = cx; bMyA[oi] = cy;
   const [br, bg, bb] = ramp(h);
   for (let j = 0; j < n; j++) {
     const k = (j + 1) % n;
@@ -958,11 +989,12 @@ function updateReadouts(force) {
   renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
   let flooded = 0;
   for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && convU8[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
+    if (!(maskU8[i] & 3) && conv0[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
   let bldWet = 0;
   for (let i = 0; i < nB; i++) {
+    if (demolished.has(i)) continue; // relocated off the floodplain
     const c = bCell[i];
-    if (!(maskU8[c] & 3) && convU8[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
+    if (!(maskU8[c] & 3) && conv0[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
   }
   const floodKm2 = flooded * CELL * CELL / 1e6;
   $("rFlood").textContent = floodKm2.toFixed(1) + " km²";
@@ -1351,10 +1383,11 @@ function floodStats(rt, buf) {
   renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, buf);
   let flooded = 0, bld = 0;
   for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && convU8[i] < 90 && buf[i * 4] > 0.25) flooded++;
+    if (!(maskU8[i] & 3) && conv0[i] < 90 && buf[i * 4] > 0.25) flooded++;
   for (let i = 0; i < nB; i++) {
+    if (demolished.has(i)) continue;
     const c = bCell[i];
-    if (!(maskU8[c] & 3) && convU8[c] < 90 && buf[c * 4] > 0.3) bld++;
+    if (!(maskU8[c] & 3) && conv0[c] < 90 && buf[c * 4] > 0.3) bld++;
   }
   return { km2: flooded * CELL * CELL / 1e6, bld };
 }
@@ -1402,6 +1435,194 @@ $("cmpWipe").addEventListener("pointerdown", e => {
   $("cmpWipe").addEventListener("pointermove", mv);
   $("cmpWipe").addEventListener("pointerup", up);
 });
+
+// ---------- engineering mode: live terrain / drainage / demolition editing ----------
+const elev0 = elev.slice(), conv0 = convU8.slice();
+const demolished = new Set();
+const engStrokes = [];
+let engTool = null, engStroke = null, engCost = 0, engCleared = 0, engBrushR = 2;
+const ENG = {
+  drain:   { hint: "Storm drain — buried pipe that pulls water out of the grid. Paint a line.",
+             costCell: 55000, ring: 0xe8590c },
+  channel: { hint: "Open channel — dig a 2 m diversion so water routes where you want it.",
+             costCell: 28000, ring: 0x1d6fd1 },
+  levee:   { hint: "Levee wall — raise a 2.5 m earth wall. Dam water out… or in. Careful.",
+             costCell: 18000, ring: 0x8a6202 },
+  basin:   { hint: "Retention basin — excavate storage upstream so the peak never arrives.",
+             costCell: 35000, ring: 0x1d6fd1 },
+  clear:   { hint: "Clear buildings — relocate structures off the floodplain. They leave the risk count.",
+             costCell: 9000, ring: 0xa32d2d },
+};
+const brushRing = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 48),
+  new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.85,
+    depthWrite: false, side: THREE.DoubleSide }));
+brushRing.rotation.x = -Math.PI / 2; brushRing.renderOrder = 8; brushRing.visible = false;
+scene.add(brushRing);
+const engRay = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+function pickGround(clientX, clientY) {
+  _ndc.set(clientX / innerWidth * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+  engRay.setFromCamera(_ndc, camera);
+  const ro = engRay.ray.origin, rd = engRay.ray.direction;
+  let t = 10, lastAbove = 10;
+  for (let i = 0; i < 700; i++) {
+    t += 34;
+    const x = ro.x + rd.x * t, y = ro.y + rd.y * t, z = ro.z + rd.z * t;
+    if (t > 65000 || y < -80) return null;
+    const mx = x + HALF, my = HALF - z;
+    if (mx < 0 || my < 0 || mx > SPAN || my > SPAN) continue;
+    if (y <= groundAt(mx, my)) {
+      let lo = lastAbove, hi = t;
+      for (let j = 0; j < 12; j++) {
+        const mid = (lo + hi) / 2;
+        const mmx = ro.x + rd.x * mid + HALF, mmy = HALF - (ro.z + rd.z * mid);
+        (ro.y + rd.y * mid <= groundAt(
+          Math.min(SPAN, Math.max(0, mmx)), Math.min(SPAN, Math.max(0, mmy)))) ? hi = mid : lo = mid;
+      }
+      const fx = ro.x + rd.x * hi, fz = ro.z + rd.z * hi;
+      const fmx = Math.min(SPAN - 1, Math.max(0, fx + HALF)),
+            fmy = Math.min(SPAN - 1, Math.max(0, HALF - fz));
+      return { mx: fmx, my: fmy, gi: fmx / CELL | 0, gj: fmy / CELL | 0 };
+    }
+    lastAbove = t;
+  }
+  return null;
+}
+function fmtCost(v) {
+  if (v < 1000) return "$" + Math.round(v);
+  return v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3) + "k";
+}
+function engStampCells(gi, gj, r, fn) {
+  const R = Math.ceil(r);
+  for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
+    const d = Math.hypot(di, dj);
+    if (d > r + 0.45) continue;
+    const i2 = gi + di, j2 = gj + dj;
+    if (i2 < 0 || j2 < 0 || i2 >= GN || j2 >= GN) continue;
+    fn(j2 * GN + i2, Math.max(0.12, 1 - (d / (r + 0.5)) ** 2));
+  }
+}
+function engStamp(tool, gi, gj, r) {
+  const st = engStroke;
+  if (tool === "levee" || tool === "channel" || tool === "basin") {
+    const amp = tool === "levee" ? 2.6 : tool === "channel" ? -2.0 : -2.8;
+    const rr = tool === "basin" ? r + 1.5 : r;
+    engStampCells(gi, gj, rr, (idx, f) => {
+      if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); st.cost += ENG[tool].costCell; }
+      elev[idx] += amp * f;
+      // cap within a stroke so dwelling in place doesn't stack infinitely
+      elev[idx] = tool === "levee"
+        ? Math.min(st.elev.get(idx) + amp, elev[idx])
+        : Math.max(st.elev.get(idx) + amp, elev[idx]);
+    });
+    terrTex.needsUpdate = true;
+  } else if (tool === "drain") {
+    engStampCells(gi, gj, r, (idx, f) => {
+      if (f < 0.3) return;
+      if (!st.conv.has(idx)) { st.conv.set(idx, convU8[idx]); st.cost += ENG.drain.costCell; }
+      if (convU8[idx] < 150) { convU8[idx] = 150; auxData[idx * 4] = 150; }
+      if (!st.elev.has(idx)) { st.elev.set(idx, elev[idx]); elev[idx] -= 0.25; }
+    });
+    auxTex.needsUpdate = true; terrTex.needsUpdate = true;
+  } else if (tool === "clear") {
+    const rad = (r + 0.5) * CELL, rad2 = rad * rad, mx = (gi + 0.5) * CELL, my = (gj + 0.5) * CELL;
+    let minV = Infinity, maxV = 0;
+    for (let b = 0; b < nB; b++) {
+      if (demolished.has(b)) continue;
+      const dx = bMxA[b] - mx, dy = bMyA[b] - my;
+      if (dx * dx + dy * dy > rad2) continue;
+      const a = cumV[b] | 0, e = cumV[b + 1] | 0;
+      st.blds.push({ b, data: posA.slice(a * 3, e * 3) });
+      for (let k = a * 3; k < e * 3; k += 3) { posA[k] = 0; posA[k + 1] = -900; posA[k + 2] = 0; }
+      demolished.add(b); engCleared++; st.cost += ENG.clear.costCell;
+      if (a < minV) minV = a; if (e > maxV) maxV = e;
+    }
+    if (maxV > 0) {
+      const attr = bGeo.getAttribute("position");
+      attr.updateRange = { offset: minV * 3, count: (maxV - minV) * 3 };
+      attr.needsUpdate = true;
+    }
+  }
+}
+function engUpdateUI() {
+  $("engCostV").textContent = fmtCost(engCost + (engStroke ? engStroke.cost : 0));
+  $("engClrV").textContent = engCleared.toLocaleString();
+}
+function armTool(t) {
+  engTool = engTool === t ? null : t;
+  document.querySelectorAll(".engT").forEach(b =>
+    b.classList.toggle("on", b.dataset.tool === engTool));
+  controls.enableRotate = !engTool;
+  brushRing.visible = false;
+  $("engHint").textContent = engTool ? ENG[engTool].hint
+    : "Camera rotate pauses while a tool is armed — right-drag still pans, scroll zooms.";
+  if (engTool) brushRing.material.color.setHex(ENG[engTool].ring);
+}
+document.querySelectorAll(".engT").forEach(b => b.onclick = () => armTool(b.dataset.tool));
+$("engBrush").oninput = e => engBrushR = +e.target.value;
+let lastStampMx = 1e9, lastStampMy = 1e9;
+renderer.domElement.addEventListener("pointerdown", e => {
+  if (!engTool || e.button !== 0 || chopperActive) return;
+  const p = pickGround(e.clientX, e.clientY);
+  if (!p) return;
+  e.preventDefault();
+  engStroke = { tool: engTool, elev: new Map(), conv: new Map(), blds: [], cost: 0 };
+  lastStampMx = 1e9;
+  engStamp(engTool, p.gi, p.gj, engBrushR);
+  lastStampMx = p.mx; lastStampMy = p.my;
+  engUpdateUI();
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+renderer.domElement.addEventListener("pointermove", e => {
+  if (!engTool || chopperActive) return;
+  const p = pickGround(e.clientX, e.clientY);
+  if (!p) { brushRing.visible = false; return; }
+  brushRing.visible = true;
+  brushRing.position.set(p.mx - HALF, groundAt(p.mx, p.my) + 2.5, HALF - p.my);
+  brushRing.scale.setScalar((engBrushR + 0.5) * CELL);
+  if (!engStroke) return;
+  if (Math.hypot(p.mx - lastStampMx, p.my - lastStampMy) < CELL * 0.7) return;
+  engStamp(engStroke.tool, p.gi, p.gj, engBrushR);
+  lastStampMx = p.mx; lastStampMy = p.my;
+  engUpdateUI();
+});
+addEventListener("pointerup", () => {
+  if (!engStroke) return;
+  if (engStroke.cost > 0 || engStroke.blds.length) {
+    engStrokes.push(engStroke); engCost += engStroke.cost;
+  }
+  engStroke = null; engUpdateUI();
+});
+function engRestoreStroke(st) {
+  for (const [idx, v] of st.elev) elev[idx] = v;
+  for (const [idx, v] of st.conv) { convU8[idx] = v; auxData[idx * 4] = v; }
+  let minV = Infinity, maxV = 0;
+  for (const { b, data } of st.blds) {
+    const a = cumV[b] | 0;
+    posA.set(data, a * 3);
+    demolished.delete(b); engCleared--;
+    if (a < minV) minV = a; if (a + data.length / 3 > maxV) maxV = a + data.length / 3;
+  }
+  if (maxV > 0) {
+    const attr = bGeo.getAttribute("position");
+    attr.updateRange = { offset: minV * 3, count: (maxV - minV) * 3 };
+    attr.needsUpdate = true;
+  }
+  if (st.elev.size) terrTex.needsUpdate = true;
+  if (st.conv.size) auxTex.needsUpdate = true;
+}
+$("engUndo").onclick = () => {
+  const st = engStrokes.pop();
+  if (!st) return;
+  engRestoreStroke(st); engCost -= st.cost; engUpdateUI();
+};
+$("engReset").onclick = () => {
+  while (engStrokes.length) engRestoreStroke(engStrokes.pop());
+  elev.set(elev0); convU8.set(conv0);
+  for (let i = 0; i < GN * GN; i++) auxData[i * 4] = convU8[i];
+  terrTex.needsUpdate = true; auxTex.needsUpdate = true;
+  engCost = 0; engCleared = 0; demolished.clear(); engUpdateUI();
+};
 
 // ---------- guided tour ----------
 const TOUR = [
@@ -1812,6 +2033,19 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   startTour, endTour, tourState: () => ({ active: tourActive, idx: tourIdx }),
   enterCompare, exitCompare, floodStats,
   cmpState: () => ({ compare: compareMode, splitX, drain: ivDrainMul, odaw: ivOdaw, wet: ivWet }),
+  eng: {
+    arm: armTool,
+    stamp: (tool, gi, gj, r) => {
+      engStroke = { tool, elev: new Map(), conv: new Map(), blds: [], cost: 0 };
+      engStamp(tool, gi, gj, r || engBrushR);
+      engStrokes.push(engStroke); engCost += engStroke.cost;
+      engStroke = null; engUpdateUI();
+    },
+    undo: () => $("engUndo").click(),
+    reset: () => $("engReset").click(),
+    state: () => ({ tool: engTool, strokes: engStrokes.length, cost: engCost,
+      cleared: engCleared }),
+  },
   enterChopper, exitChopper,
   chopState: () => ({ active: chopperActive, t: chopT, stops: chopStops.length,
     camY: camera.position.y.toFixed(0) }),
@@ -1837,7 +2071,7 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
       if (maskU8[i] & 3) continue;
       const d = readBuf[i * 4];
       vol += d;
-      if (convU8[i] >= 90) continue; // in-channel water is not street flooding
+      if (conv0[i] >= 90) continue; // in-channel water is not street flooding
       if (d > mx) { mx = d; mi = i; }
       if (d > 0.25) n25++;
       if (d > 0.05) n05++;
