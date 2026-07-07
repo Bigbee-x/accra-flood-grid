@@ -1627,7 +1627,7 @@ function updateChopper(dt) {
     chopSpeedFwd += (kf * 300 - chopSpeedFwd) * Math.min(1, dt * 1.7);
     chopClimb += (kc * 175 - chopClimb) * Math.min(1, dt * 2.6);
     chopPos.addScaledVector(chopFwd, chopSpeedFwd * dt);
-    chopPos.y += chopClimb * dt + Math.sin(t * 1.8) * 1.1;           // idle hover
+    chopPos.y += chopClimb * dt;
     chopPos.x = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.x));
     chopPos.z = Math.max(-HALF + MARGIN, Math.min(HALF - MARGIN, chopPos.z));
     chopPos.y = Math.max(chopGround() + 70, Math.min(3600, chopPos.y));
@@ -1638,6 +1638,8 @@ function updateChopper(dt) {
   _yA.crossVectors(_zA, _xA).normalize();
   _basis.makeBasis(_xA, _yA, _zA);
   chopper.position.copy(chopPos);
+  if (chopMode === "manual") // visual hover bob only — never fed back into the flight position
+    chopper.position.y += Math.sin(t * 1.6) * 1.5;
   chopper.quaternion.setFromRotationMatrix(_basis);
   const sway = chopMode === "auto" ? Math.sin(t * 0.6) * 0.05 : 0;
   const bankTarget = Math.max(-0.7, Math.min(0.7, yawRate * 0.6 + sway));
