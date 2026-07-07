@@ -106,6 +106,34 @@
   #tourProg { color:#7a6f60; font-size:11.5px; min-width:42px; text-align:center;
     font-variant-numeric:tabular-nums; }
   @media (max-width:520px){ #panel{ width:calc(100vw - 32px); } }
+  .ivIntro { color:#4a4238; font-size:11.5px; line-height:1.5; margin:0 0 9px; }
+  .ivRow { margin:9px 0; }
+  .ivHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .ivName { font-size:12.5px; color:#2b2620; }
+  .ivName input { margin-right:6px; vertical-align:-1px; }
+  .ivSub { color:#8b8071; font-size:10.5px; line-height:1.4; display:block; margin:1px 0 3px 0; }
+  .ivRow input[type=range] { width:100%; margin-top:2px; }
+  #cmpBtn { width:100%; box-sizing:border-box; margin:10px 0 0; font-weight:600;
+    background:#eef3f9; border-color:#1d6fd1; color:#0b3f8a; padding:7px; font-size:12.5px; }
+  #cmpBtn.on { background:#e7f0fb; }
+  #cmpWipe { position:fixed; top:0; bottom:0; width:3px; background:#fff; z-index:22;
+    box-shadow:0 0 0 1px rgba(80,65,45,.35); display:none; cursor:ew-resize; }
+  #cmpWipe::before { content:"⇄"; position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%); width:30px; height:30px; border-radius:15px;
+    background:#fff; color:#5a5044; font-size:15px; line-height:30px; text-align:center;
+    box-shadow:0 1px 6px rgba(80,65,45,.3); }
+  .cmpTag { position:fixed; top:18px; z-index:21; display:none; padding:5px 11px;
+    border-radius:8px; font:600 12px "Helvetica Neue",Helvetica,Arial,sans-serif;
+    box-shadow:0 2px 10px rgba(80,65,45,.18); }
+  #cmpTagL { left:348px; background:#fae7d9; color:#a13c05; border:1px solid #f0b28a; }
+  #cmpTagR { right:24px; background:#e4eefb; color:#0b3f8a; border:1px solid #a9c8ec; }
+  @media (max-width:520px){ #cmpTagL{ left:16px; top:64px; } }
+  #cmpStat { position:fixed; top:18px; left:50%; transform:translateX(-50%); z-index:21;
+    display:none; padding:6px 14px; border-radius:9px; background:rgba(252,250,245,.96);
+    border:1px solid #d8cec0; box-shadow:0 2px 12px rgba(80,65,45,.2);
+    font:12.5px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#2b2620; white-space:nowrap; }
+  #cmpStat b { font-variant-numeric:tabular-nums; }
+  #cmpStat .cut { color:#1d6fd1; font-weight:600; }
 </style>
 </head>
 <body>
@@ -172,13 +200,35 @@
     <div class="note">Drag to scrub the flood through time &middot; rainfall bars, flooded-area line.</div>
   </div>
 
-  <div class="sec"><div class="t">Interventions</div>
-    <div class="row"><span class="muted">Drains: clogged &rarr; clear</span>
-      <input type="range" id="drainSlider" min="0" max="100" value="18"></div>
-    <label class="chk"><input type="checkbox" id="odawChk"> Odaw dredged <span class="muted">(GARID done)</span></label>
-    <label class="chk"><input type="checkbox" id="wetChk"> Wetlands restored</label>
-    <div class="row"><span class="muted">Tide at Korle outlet</span>
-      <input type="range" id="tideSlider" min="0" max="150" value="30"></div>
+  <div class="sec"><div class="t">Interventions — what could stop this</div>
+    <div class="ivIntro">Each control is a real fix Accra is debating. Turn them on and watch
+      the flood shrink — then hit compare to see today vs. fixed, side by side.</div>
+
+    <div class="ivRow">
+      <div class="ivHead"><span class="ivName">Clear the drains</span>
+        <span class="muted" id="drainVal">18%</span></div>
+      <span class="ivSub">De-silt and de-plastic the storm drains so they carry water again.</span>
+      <input type="range" id="drainSlider" min="0" max="100" value="18">
+    </div>
+
+    <div class="ivRow">
+      <label class="ivName"><input type="checkbox" id="odawChk">Dredge the Odaw channel</label>
+      <span class="ivSub">The stalled $350M GARID works — deepen the main channel to the sea.</span>
+    </div>
+
+    <div class="ivRow">
+      <label class="ivName"><input type="checkbox" id="wetChk">Restore the wetlands</label>
+      <span class="ivSub">Give the Ramsar wetlands back so the ground soaks up the rain.</span>
+    </div>
+
+    <div class="ivRow">
+      <div class="ivHead"><span class="ivName">Sea level at Korle outlet</span>
+        <span class="muted" id="tideVal">normal</span></div>
+      <span class="ivSub">A high tide backs up the outfall and traps floodwater inland.</span>
+      <input type="range" id="tideSlider" min="0" max="150" value="30">
+    </div>
+
+    <button id="cmpBtn">&#8646; Compare: today vs. fixed</button>
   </div>
 
   <div class="sec"><div class="t">Look</div>
@@ -214,6 +264,11 @@
     <button id="tourExit">exit tour</button>
   </div>
 </div>
+
+<div id="cmpTagL" class="cmpTag">Drains clogged — today</div>
+<div id="cmpTagR" class="cmpTag">Drains cleared + Odaw dredged</div>
+<div id="cmpStat"></div>
+<div id="cmpWipe"></div>
 
 <script>//__THREE__</script>
 <script>//__ORBIT__</script>
@@ -421,9 +476,28 @@ function simStep(n) {
     cur = 1 - cur;
   }
 }
+// world B: a second, independent simulation for the split-screen compare
+const depthB = [makeRT(), makeRT()], fluxB = [makeRT(), makeRT()];
+let curB = 0, compareMode = false;
+function stepB(n) {
+  for (let i = 0; i < n; i++) {
+    simU.uDepth.value = depthB[curB].texture; simU.uFlux.value = fluxB[curB].texture;
+    runPass(fluxPass, fluxB[1 - curB]);
+    simU.uFlux.value = fluxB[1 - curB].texture;
+    runPass(depthPass, depthB[1 - curB]);
+    curB = 1 - curB;
+  }
+}
+function resetB() {
+  runPass(resetPass, depthB[0]); runPass(resetPass, depthB[1]);
+  runPass(zeroPass, fluxB[0]); runPass(zeroPass, fluxB[1]);
+  curB = 0;
+}
 function simReset() {
+  simU.uSea.value = ivTide;
   runPass(resetPass, depthRT[0]); runPass(resetPass, depthRT[1]);
   runPass(zeroPass, fluxRT[0]); runPass(zeroPass, fluxRT[1]);
+  resetB();
   cur = 0; simClock = 0;
   peakFlood = 0; peakBld = 0;
   for (const p of places) { p.cur = 0; p.peak = 0; }
@@ -790,6 +864,9 @@ let bloomOn = false;
 let simClock = 0, raining = false, running = true;
 let simRate = 150;      // sim-seconds per real second (1x = 1 s : 2.5 storm-min)
 let stepCarry = 0, cloudCov = 0.12, flashV = 0, fcPrevRate = 150;
+// intervention parameters (drive world B / the single sim); world A in compare is fixed clogged
+let ivDrainMul = 0.18, ivOdaw = 1.0, ivWet = 1.0, ivTide = 0.3;
+const CLOGGED = { drain: 0.18, odaw: 1.0, wet: 1.0 };
 const storm = { schedule: [47, 47, 47] }; // mm/h per storm hour (hyetograph)
 const SIM_STEPS = 6, MM_H = 2.7778e-7;
 const BG_FAIR = new THREE.Color(0xefe9dc), BG_STORM = new THREE.Color(0xa9a59e),
@@ -816,10 +893,13 @@ $("btnRain").onclick = () => {
 $("btnReset").onclick = () => { raining = false;
   $("btnRain").innerHTML = "&#9654; start storm";
   $("btnRain").classList.remove("on"); simReset(); };
-$("drainSlider").oninput = e => simU.uDrainMul.value = 0.05 + (+e.target.value / 100) * 0.95;
-$("odawChk").onchange = e => simU.uOdawBoost.value = e.target.checked ? 2.4 : 1.0;
-$("wetChk").onchange = e => simU.uWetMul.value = e.target.checked ? 2.2 : 1.0;
-$("tideSlider").oninput = e => simU.uSea.value = +e.target.value / 100;
+$("drainSlider").oninput = e => { ivDrainMul = 0.05 + (+e.target.value / 100) * 0.95;
+  $("drainVal").textContent = e.target.value + "%"; };
+$("odawChk").onchange = e => { ivOdaw = e.target.checked ? 2.4 : 1.0; };
+$("wetChk").onchange = e => { ivWet = e.target.checked ? 2.2 : 1.0; };
+$("tideSlider").oninput = e => { ivTide = +e.target.value / 100;
+  const v = +e.target.value;
+  $("tideVal").textContent = v < 20 ? "low" : v < 75 ? "normal" : v < 115 ? "high" : "storm surge"; };
 $("bloomChk").onchange = e => bloomOn = e.target.checked;
 $("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
 for (const b of document.querySelectorAll("#spdBtns button"))
@@ -1199,7 +1279,7 @@ function applyReview() {
   $("tlTime").textContent = clockStr(reviewT);
 }
 function enterReview() {
-  if (!snaps.length) return;
+  if (!snaps.length || compareMode) return;
   reviewMode = true; replayAnim = null; tlLiveBtn.classList.remove("on");
 }
 function tlSeek(clientX) {
@@ -1224,6 +1304,64 @@ $("tlReplay").onclick = () => {
   enterReview();
   replayAnim = { from: 0, to: snaps[snaps.length - 1].t, t0: uTime.value, dur: 7 };
 };
+
+// ---------- split-screen compare (today vs. interventions) ----------
+let splitX = 0.5;
+const readBufB = new Float32Array(GN * GN * 4);
+function floodStats(rt, buf) {
+  renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, buf);
+  let flooded = 0, bld = 0;
+  for (let i = 0; i < GN * GN; i++)
+    if (!(maskU8[i] & 3) && convU8[i] < 90 && buf[i * 4] > 0.25) flooded++;
+  for (let i = 0; i < nB; i++) {
+    const c = bCell[i];
+    if (!(maskU8[c] & 3) && convU8[c] < 90 && buf[c * 4] > 0.3) bld++;
+  }
+  return { km2: flooded * CELL * CELL / 1e6, bld };
+}
+function updateCmpStat() {
+  const A = floodStats(depthRT[cur], readBuf);
+  const B = floodStats(depthB[curB], readBufB);
+  const cut = A.km2 > 0.05 ? Math.round((1 - B.km2 / A.km2) * 100) : 0;
+  $("cmpStat").innerHTML =
+    `Today <b>${A.km2.toFixed(1)} km²</b> &nbsp;·&nbsp; Fixed <b>${B.km2.toFixed(1)} km²</b>` +
+    (cut > 0 ? ` &nbsp;·&nbsp; <span class="cut">${cut}% less flooding</span>` : "");
+}
+function positionWipe() { $("cmpWipe").style.left = (splitX * 100) + "%"; }
+function enterCompare() {
+  if (tourActive) endTour();
+  compareMode = true; reviewMode = false; replayAnim = null;
+  $("drainSlider").value = 100; ivDrainMul = 1.0; $("drainVal").textContent = "100%";
+  $("odawChk").checked = true; ivOdaw = 2.4;
+  $("wetChk").checked = true; ivWet = 2.2;
+  $("p2026").click(); simReset();
+  raining = true; simRate = 210;
+  document.querySelectorAll("#spdBtns button").forEach(x => x.classList.remove("on"));
+  $("btnRain").innerHTML = "&#9646;&#9646; pause storm"; $("btnRain").classList.add("on");
+  $("cmpBtn").classList.add("on"); $("cmpBtn").innerHTML = "&#10005; Exit compare";
+  for (const el of ["cmpWipe", "cmpTagL", "cmpTagR", "cmpStat"]) $(el).style.display = "block";
+  splitX = 0.5; positionWipe(); updateCmpStat();
+}
+function exitCompare() {
+  compareMode = false; raining = false; simRate = 150;
+  $("drainSlider").value = 18; ivDrainMul = 0.18; $("drainVal").textContent = "18%";
+  $("odawChk").checked = false; ivOdaw = 1.0;
+  $("wetChk").checked = false; ivWet = 1.0;
+  document.querySelectorAll("#spdBtns button").forEach(x => x.classList.toggle("on", x.dataset.s === "150"));
+  $("btnRain").innerHTML = "&#9654; start storm"; $("btnRain").classList.remove("on");
+  $("cmpBtn").classList.remove("on"); $("cmpBtn").innerHTML = "&#8646; Compare: today vs. fixed";
+  for (const el of ["cmpWipe", "cmpTagL", "cmpTagR", "cmpStat"]) $(el).style.display = "none";
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+}
+$("cmpBtn").onclick = () => compareMode ? exitCompare() : enterCompare();
+$("cmpWipe").addEventListener("pointerdown", e => {
+  e.preventDefault(); $("cmpWipe").setPointerCapture(e.pointerId);
+  const mv = ev => { splitX = Math.min(0.85, Math.max(0.15, ev.clientX / innerWidth)); positionWipe(); };
+  const up = () => { $("cmpWipe").removeEventListener("pointermove", mv);
+    $("cmpWipe").removeEventListener("pointerup", up); };
+  $("cmpWipe").addEventListener("pointermove", mv);
+  $("cmpWipe").addEventListener("pointerup", up);
+});
 
 // ---------- guided tour ----------
 const TOUR = [
@@ -1250,6 +1388,7 @@ function tourStop() {
   $("tourProg").textContent = (tourIdx + 1) + " / " + TOUR.length;
 }
 function startTour() {
+  if (compareMode) exitCompare();
   $("btnReset").click(); $("p2026").click();
   reviewMode = false; $("tlLive").classList.add("on");
   raining = true; simRate = 210; // paces the 6-stop tour to finish near peak (~T+2.5h)
@@ -1298,7 +1437,20 @@ function animate() {
       const n = Math.floor(stepCarry);
       stepCarry -= n;
       if (n > 0) {
-        simStep(n); simClock += n * simU.uDt.value;
+        simU.uSea.value = ivTide;
+        if (compareMode) {
+          simU.uDrainMul.value = CLOGGED.drain; simU.uOdawBoost.value = CLOGGED.odaw;
+          simU.uWetMul.value = CLOGGED.wet;
+          simStep(n);                                   // A = clogged / today
+          simU.uDrainMul.value = ivDrainMul; simU.uOdawBoost.value = ivOdaw;
+          simU.uWetMul.value = ivWet;
+          stepB(n);                                     // B = chosen interventions
+        } else {
+          simU.uDrainMul.value = ivDrainMul; simU.uOdawBoost.value = ivOdaw;
+          simU.uWetMul.value = ivWet;
+          simStep(n);
+        }
+        simClock += n * simU.uDt.value;
         const snapInt = Math.max(SNAP_INT, tlWindow() / MAXSNAP);
         if (simClock >= lastSnapT + snapInt) { captureSnap(); lastSnapT = simClock; }
       }
@@ -1341,16 +1493,38 @@ function animate() {
   }
   if (frame % 2 === 0) updateLabels();
   if (frame % 3 === 0) drawTL();
-  if (reviewMode && reviewDepth) {
-    waterU.uDepth.value = reviewDepth; waterU.uFlux.value = zeroFlux;
-    bldU.uDepth.value = reviewDepth;
+  if (++frame % 45 === 0 && !reviewMode) { updateReadouts(); if (compareMode) updateCmpStat(); }
+  if (compareMode) {
+    renderSplit();
   } else {
-    waterU.uDepth.value = depthRT[cur].texture;
-    waterU.uFlux.value = fluxRT[cur].texture;
-    bldU.uDepth.value = depthRT[cur].texture;
+    if (reviewMode && reviewDepth) {
+      waterU.uDepth.value = reviewDepth; waterU.uFlux.value = zeroFlux;
+      bldU.uDepth.value = reviewDepth;
+    } else {
+      waterU.uDepth.value = depthRT[cur].texture;
+      waterU.uFlux.value = fluxRT[cur].texture;
+      bldU.uDepth.value = depthRT[cur].texture;
+    }
+    if (bloomOn) composer.render(); else renderer.render(scene, camera);
   }
-  if (++frame % 45 === 0 && !reviewMode) updateReadouts();
-  if (bloomOn) composer.render(); else renderer.render(scene, camera);
+}
+function bindWorld(depthArr, fluxArr, ci) {
+  waterU.uDepth.value = depthArr[ci].texture;
+  waterU.uFlux.value = fluxArr[ci].texture;
+  bldU.uDepth.value = depthArr[ci].texture;
+}
+function renderSplit() {
+  const w = innerWidth, h = innerHeight, sx = Math.round(w * splitX);
+  renderer.setScissorTest(true);
+  renderer.setViewport(0, 0, w, h);
+  bindWorld(depthRT, fluxRT, cur);          // left: today (clogged)
+  renderer.setScissor(0, 0, sx, h);
+  renderer.render(scene, camera);
+  bindWorld(depthB, fluxB, curB);           // right: chosen interventions
+  renderer.setScissor(sx, 0, w - sx, h);
+  renderer.render(scene, camera);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, w, h);
 }
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -1367,6 +1541,8 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   seek: t => { reviewT = t; enterReview(); applyReview(); },
   goLive: () => { reviewMode = false; replayAnim = null; tlLiveBtn.classList.add("on"); },
   startTour, endTour, tourState: () => ({ active: tourActive, idx: tourIdx }),
+  enterCompare, exitCompare, floodStats,
+  cmpState: () => ({ compare: compareMode, splitX, drain: ivDrainMul, odaw: ivOdaw, wet: ivWet }),
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
     renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
     const i = gy * GN + gx;

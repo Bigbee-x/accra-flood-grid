@@ -6,12 +6,14 @@ Open [`dist/accra-flood-grid.html`](dist/accra-flood-grid.html) in any modern br
 
 ## Why
 
-Accra floods every June, and every credible study points to the same causes: a low-lying basin funneled into one silted channel, drains choked with plastic, buildings on floodplains, and drainage built for a much smaller city. This project turns those causes into switches you can flip:
+Accra floods every June, and every credible study points to the same causes: a low-lying basin funneled into one silted channel, drains choked with plastic, buildings on floodplains, and drainage built for a much smaller city. This project turns those causes into switches you can flip, each modelling a real fix Accra is debating:
 
-- **Drains: clogged → clear** — today's reality vs. maintained drains
-- **Odaw dredged** — the completed-GARID counterfactual
-- **Wetlands restored** — upstream infiltration recovered
-- **Tide at Korle outlet** — compound coastal flooding
+- **Clear the drains** — de-silt and de-plastic the storm drains (today's reality vs. maintained)
+- **Dredge the Odaw channel** — the stalled $350M GARID works
+- **Restore the wetlands** — give the Ramsar wetlands back so the ground soaks up rain
+- **Sea level at Korle outlet** — a high tide backs up the outfall and traps water inland
+
+And a **split-screen compare**: two full simulations of the same storm run side by side — drains clogged (today) on the left, your chosen fixes on the right — with a draggable wipe divider and a live "X% less flooding" readout. Drag the divider across any neighbourhood to see the two outcomes at the same spot.
 
 And it knows the city by name:
 
