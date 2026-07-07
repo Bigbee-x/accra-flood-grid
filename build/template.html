@@ -15,7 +15,14 @@
     box-shadow:0 2px 14px rgba(80,65,45,.14);
     font:13px "Helvetica Neue", Helvetica, Arial, sans-serif; color:#2b2620;
     padding:14px 16px 12px; user-select:none;
+    transition:transform .28s ease, opacity .28s ease;
   }
+  #panel.hidden { transform:translateX(calc(-100% - 26px)); opacity:0; pointer-events:none; }
+  #panelToggle { position:fixed; top:16px; right:16px; z-index:30; width:38px; height:38px;
+    border-radius:10px; background:rgba(252,250,245,.9); border:1px solid #d8cec0;
+    box-shadow:0 2px 10px rgba(80,65,45,.16); color:#4a4238; font-size:16px; cursor:pointer;
+    opacity:.6; transition:opacity .2s; font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; }
+  #panelToggle:hover { opacity:1; }
   #panel::-webkit-scrollbar { width:8px; }
   #panel::-webkit-scrollbar-thumb { background:#dcd3c4; border-radius:4px; }
   #tl { width:100%; height:64px; display:block; cursor:ew-resize; border-radius:6px;
@@ -153,6 +160,7 @@
 </style>
 </head>
 <body>
+<button id="panelToggle" title="Hide / show panel (H)" aria-label="Hide or show panel">&#9776;</button>
 <div id="panel">
   <h1>Accra // flood grid</h1>
   <div class="sub">Odaw basin &middot; storm replay &middot; live water</div>
@@ -1627,6 +1635,19 @@ function exitChopper() {
 $("chopBtn").onclick = () => chopperActive ? exitChopper() : enterChopper();
 $("chopAuto").onclick = () => setChopMode("auto");
 $("chopManual").onclick = () => setChopMode("manual");
+
+// hide / show the control panel (button + H key) — for a clean view / recording
+function togglePanel(force) {
+  const hide = force !== undefined ? force : !$("panel").classList.contains("hidden");
+  $("panel").classList.toggle("hidden", hide);
+  $("panelToggle").title = (hide ? "Show" : "Hide") + " panel (H)";
+}
+$("panelToggle").onclick = () => togglePanel();
+addEventListener("keydown", e => {
+  if (e.key.toLowerCase() !== "h") return;
+  if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+  togglePanel();
+});
 
 // ---------- animate ----------
 sizeTL();

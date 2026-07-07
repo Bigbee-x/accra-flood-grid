@@ -69,6 +69,8 @@ node smoke_test.js         # payload self-consistency check
 
 (Paths in the build scripts are absolute for the original machine — adjust `DATA`/`ROOT` constants if you rebuild elsewhere.)
 
+Hit the **☰** button (top-right) or press **H** to hide the control panel for a clean, unobstructed view — handy for screenshots and recording.
+
 ## Honest limits
 
 This is a **basin-scale explainer, not parcel-level prediction**. 30 m terrain and a 43 m simulation grid cannot see individual streets or gutters. Sim parameters are physically motivated and mass-conserving but tuned to reproduce reported flood behavior, not calibrated against gauge data. ~90% of building heights are heuristic. Don't use this to decide whether a specific plot floods; use it to understand why the city floods and what classes of intervention change that.
