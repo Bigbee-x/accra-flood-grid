@@ -180,8 +180,25 @@ def water_class(p):
 
 r_enc, r_class = clip_lines("roads", road_class)
 w_enc, w_class = clip_lines("waterways", water_class)
-print(f"roads: {len(r_enc.lens)} polylines | waterways: {len(w_enc.lens)} "
+m_enc, _ = clip_lines("minor", lambda p: 0)
+x_enc, x_class = clip_lines("xtras", lambda p: p["k"])
+print(f"roads: {len(r_enc.lens)} polylines | minor: {len(m_enc.lens)} | "
+      f"xtras: {len(x_enc.lens)} | waterways: {len(w_enc.lens)} "
       f"(odaw segs: {int((w_class == 4).sum())}) ({time.time()-t0:.0f}s)")
+
+# green spaces + airport surfaces -> raster mask bits (terrain tint, no geometry)
+green_geoms, aero_geoms = [], []
+for rec in load("landpoly"):
+    poly = Polygon(to_utm(rec["c"]))
+    if not poly.is_valid:
+        poly = poly.buffer(0)
+    if poly.is_empty:
+        continue
+    poly = poly.intersection(clip_rect)
+    if poly.is_empty or poly.area < 1200:
+        continue
+    (green_geoms if rec["p"]["role"] == 0 else aero_geoms).append(poly)
+print(f"landpolys: {len(green_geoms)} green, {len(aero_geoms)} airport")
 
 # ---- water/wetland polygons (rendered + rasterized) ----
 p_enc, p_role, water_geoms, wetland_geoms = PolyEncoder(), [], [], []
@@ -292,7 +309,22 @@ print(f"terrain: elev range {elev.min():.1f}..{elev.max():.1f} m, "
       f"ocean cells {int(ocean.sum())}, water cells {int(water_mask.sum())}, "
       f"wetland cells {int(wet_mask.sum())}")
 
-mask = (ocean.astype(np.uint8) | (water_mask << 1) | (wet_mask << 2))
+green_mask = np.zeros((GRID_N, GRID_N), np.uint8)
+if green_geoms:
+    green_mask = features.rasterize([(g, 1) for g in green_geoms],
+                                    out_shape=(GRID_N, GRID_N),
+                                    transform=grid_transform, fill=0, dtype="uint8")
+aero_mask = np.zeros((GRID_N, GRID_N), np.uint8)
+if aero_geoms:
+    aero_mask = features.rasterize([(g, 1) for g in aero_geoms],
+                                   out_shape=(GRID_N, GRID_N),
+                                   transform=grid_transform, fill=0,
+                                   all_touched=True, dtype="uint8")
+print(f"raster tints: {int(green_mask.sum())} green cells, "
+      f"{int(aero_mask.sum())} airport cells")
+
+mask = (ocean.astype(np.uint8) | (water_mask << 1) | (wet_mask << 2)
+        | (green_mask << 3) | (aero_mask << 4))
 
 # building density -> imperviousness proxy (blurred footprint fraction)
 dens /= cell * cell
@@ -320,17 +352,22 @@ bl, bs, bd = b_enc.arrays()
 rl, rs, rd = r_enc.arrays()
 wl, ws, wd = w_enc.arrays()
 pl, ps, pd = p_enc.arrays()
+ml, ms, md = m_enc.arrays()
+xl, xs, xd = x_enc.arrays()
 
 payload = {
     "meta": {
         "scale": SCALE, "utm_origin": [x0, y0], "epsg": 32630,
         "grid": {"n": GRID_N, "cell": cell, "elev_scale": 0.1, "elev_off": -50.0},
         "nBld": len(bl), "nRoad": len(rl), "nWater": len(wl), "nPoly": len(pl),
+        "nMinor": len(ml), "nXtra": len(xl),
         "bbox_wgs84": BBOX,
     },
     "bLen": b64(bl), "bStart": b64(bs), "bDelta": b64(bd),
     "bH": b64(np.array(b_heights, "<f4")),
     "rLen": b64(rl), "rStart": b64(rs), "rDelta": b64(rd), "rClass": b64(r_class),
+    "mLen": b64(ml), "mStart": b64(ms), "mDelta": b64(md),
+    "xLen": b64(xl), "xStart": b64(xs), "xDelta": b64(xd), "xClass": b64(x_class),
     "wLen": b64(wl), "wStart": b64(ws), "wDelta": b64(wd), "wClass": b64(w_class),
     "pLen": b64(pl), "pStart": b64(ps), "pDelta": b64(pd),
     "pRole": b64(np.array(p_role, "u1")),

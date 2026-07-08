@@ -28,8 +28,14 @@ function checkLayer(name, prefix, count) {
 }
 checkLayer("buildings", "b", P.meta.nBld);
 checkLayer("roads", "r", P.meta.nRoad);
+checkLayer("minor roads", "m", P.meta.nMinor);
+checkLayer("xtras", "x", P.meta.nXtra);
 checkLayer("waterways", "w", P.meta.nWater);
 checkLayer("waterpolys", "p", P.meta.nPoly);
+
+const satM = html.match(/const SAT_B64 = "([^"]+)"/);
+if (!satM || satM[1].length < 200000) throw new Error("satellite texture missing/too small");
+console.log(`  satellite: ${(satM[1].length * 0.75 / 1e6).toFixed(2)} MB embedded`);
 
 const bH = b64(P.bH, Float32Array);
 if (bH.length !== P.meta.nBld) throw new Error("bH length");

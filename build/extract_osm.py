@@ -15,7 +15,11 @@ ROAD_CLASSES = {
     "motorway", "motorway_link", "trunk", "trunk_link",
     "primary", "primary_link", "secondary", "secondary_link", "tertiary",
 }
+MINOR_CLASSES = {"residential", "unclassified", "living_street", "tertiary_link"}
 WATERWAY_CLASSES = {"drain", "river", "stream", "canal", "ditch"}
+GREEN_LEISURE = {"park", "pitch", "stadium", "golf_course", "garden", "nature_reserve"}
+GREEN_LANDUSE = {"grass", "forest", "recreation_ground", "cemetery", "meadow", "orchard"}
+GREEN_NATURAL = {"wood", "scrub"}
 DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
 
 
@@ -28,7 +32,8 @@ class Handler(osmium.SimpleHandler):
         super().__init__()
         self.files = {
             name: open(f"{DATA}/{name}.jsonl", "w")
-            for name in ("buildings", "roads", "waterways", "waterpoly")
+            for name in ("buildings", "roads", "minor", "xtras", "waterways",
+                         "waterpoly", "landpoly")
         }
         self.counts = dict.fromkeys(self.files, 0)
         self.skipped_loc = 0
@@ -70,6 +75,37 @@ class Handler(osmium.SimpleHandler):
             if pts and any(in_bbox(x, y) for x, y in pts):
                 self.emit("roads", pts, {"highway": hw})
             return
+        if hw in MINOR_CLASSES:
+            pts = self.coords(w)
+            if pts and any(in_bbox(x, y) for x, y in pts):
+                self.emit("minor", pts, {})
+            return
+
+        aw = tags.get("aeroway")
+        if aw in ("runway", "taxiway") and not w.is_closed():
+            pts = self.coords(w)
+            if pts and any(in_bbox(x, y) for x, y in pts):
+                self.emit("xtras", pts, {"k": 0 if aw == "runway" else 1})
+            return
+        if tags.get("railway") == "rail":
+            pts = self.coords(w)
+            if pts and any(in_bbox(x, y) for x, y in pts):
+                self.emit("xtras", pts, {"k": 2})
+            return
+
+        if w.is_closed() and len(w.nodes) >= 4:
+            role = None
+            if (tags.get("leisure") in GREEN_LEISURE
+                    or tags.get("landuse") in GREEN_LANDUSE
+                    or tags.get("natural") in GREEN_NATURAL):
+                role = 0
+            elif tags.get("aeroway") in ("apron", "terminal", "runway"):
+                role = 1
+            if role is not None:
+                pts = self.coords(w)
+                if pts and any(in_bbox(x, y) for x, y in pts):
+                    self.emit("landpoly", pts, {"role": role})
+                return
 
         ww = tags.get("waterway")
         if ww in WATERWAY_CLASSES:

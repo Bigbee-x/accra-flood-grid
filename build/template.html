@@ -58,6 +58,8 @@
   #btnRain:hover { background:#d14e08; }
   #btnRain.on { background:#a13c05; border-color:#a13c05; color:#ffe1cf; }
   #ivChips button.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; font-weight:600; }
+  #styleChips button.on { background:#e7ecf1; border-color:#3f4854; color:#2b333c; font-weight:600; }
+  .lbl.t3 { font-size:10px; color:#8a7f6e; font-style:italic; }
   input[type=range] { width:110px; accent-color:#e8590c; height:14px; }
   input[type=checkbox] { accent-color:#e8590c; }
   label.chk { display:flex; align-items:center; gap:6px; margin:4px 0; cursor:pointer; }
@@ -188,6 +190,10 @@
       <div id="qRes"></div>
     </div>
     <button id="tourBtn">&#9654; Guided tour of the flood</button>
+    <div class="btns" id="styleChips" style="margin:6px 0 2px">
+      <button id="styleSand" class="on">Sand-table</button>
+      <button id="styleSat">Satellite</button>
+    </div>
   </div>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
@@ -345,6 +351,7 @@
 <script>const P = {"__PAYLOAD__":1};</script>
 <script>
 "use strict";
+const SAT_B64 = "__SAT__"; // baked Sentinel-2 true-color (assembler injects)
 // ---------- payload decode ----------
 function b64(s, T) {
   const bin = atob(s), n = bin.length, u8 = new Uint8Array(n);
@@ -358,6 +365,10 @@ const bLen = b64(P.bLen, Uint16Array), bStart = b64(P.bStart, Int32Array),
       rDelta = b64(P.rDelta, Int16Array), rClass = b64(P.rClass, Uint8Array),
       wLen = b64(P.wLen, Uint16Array), wStart = b64(P.wStart, Int32Array),
       wDelta = b64(P.wDelta, Int16Array), wClass = b64(P.wClass, Uint8Array),
+      mLen = b64(P.mLen, Uint16Array), mStart = b64(P.mStart, Int32Array),
+      mDelta = b64(P.mDelta, Int16Array),
+      xLen = b64(P.xLen, Uint16Array), xStart = b64(P.xStart, Int32Array),
+      xDelta = b64(P.xDelta, Int16Array), xClass = b64(P.xClass, Uint8Array),
       elevU16 = b64(P.elev, Uint16Array), convU8 = b64(P.conv, Uint8Array),
       maskU8 = b64(P.mask, Uint8Array), densU8 = b64(P.dens, Uint8Array);
 const elev = new Float32Array(GN * GN);
@@ -433,6 +444,16 @@ for (let i = 0; i < GN * GN; i++) {
 }
 const auxTex = new THREE.DataTexture(auxData, GN, GN, THREE.RGBAFormat, THREE.UnsignedByteType);
 auxTex.needsUpdate = true; auxTex.minFilter = auxTex.magFilter = THREE.NearestFilter;
+// baked Sentinel-2 true-color texture (satellite mode)
+const satTex = new THREE.Texture();
+satTex.flipY = false; // north-up image; the shader maps v=0(south) -> 1-v itself
+satTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+{
+  const im = new Image();
+  im.onload = () => { satTex.image = im; satTex.needsUpdate = true; };
+  im.src = "data:image/jpeg;base64," + SAT_B64;
+}
+const uSatMode = { value: 0 };
 
 // ---------- water sim (virtual pipes, ping-pong RGBA32F) ----------
 function makeRT() {
@@ -466,7 +487,9 @@ const simU = {
 const maskFns = `
   float bit0(float m){ return step(0.5, mod(m, 2.0)); }
   float bit1(float m){ return step(0.5, mod(floor(m / 2.0), 2.0)); }
-  float bit2(float m){ return step(0.5, mod(floor(m / 4.0), 2.0)); }`;
+  float bit2(float m){ return step(0.5, mod(floor(m / 4.0), 2.0)); }
+  float bit3(float m){ return step(0.5, mod(floor(m / 8.0), 2.0)); }
+  float bit4(float m){ return step(0.5, mod(floor(m / 16.0), 2.0)); }`;
 const resetPass = simPass(`
   uniform sampler2D uTerr, uAux; uniform float uSea; varying vec2 vUv; ${maskFns}
   void main(){
@@ -592,7 +615,7 @@ function gridGeometry() {
 const grid = gridGeometry();
 const terrMat = new THREE.ShaderMaterial({
   uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex },
-    uCloud: uCloudU, uWind: uWindU },
+    uCloud: uCloudU, uWind: uWindU, uSat: { value: satTex }, uSatMode: uSatMode },
   vertexShader: `
     uniform sampler2D uTerr; varying vec2 vUv; varying float vE; varying vec2 vXZ;
     void main(){
@@ -602,7 +625,7 @@ const terrMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform sampler2D uAux; uniform float uCloud; uniform vec2 uWind;
+    uniform sampler2D uAux, uSat; uniform float uCloud, uSatMode; uniform vec2 uWind;
     varying vec2 vUv; varying float vE; varying vec2 vXZ;
     ${maskFns}
     ${NOISE}
@@ -615,6 +638,11 @@ const terrMat = new THREE.ShaderMaterial({
       c -= contour * vec3(0.055, 0.050, 0.045);
       c = mix(c, vec3(0.700, 0.760, 0.820), max(bit0(m), bit1(m)) * 0.9);
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
+      c = mix(c, vec3(0.678, 0.741, 0.541), bit3(m) * 0.55);
+      c = mix(c, vec3(0.780, 0.773, 0.749), bit4(m) * 0.8);
+      // satellite mode replaces the cartographic ground entirely
+      vec3 sat = texture2D(uSat, vec2(vUv.x, 1.0 - vUv.y)).rgb;
+      c = mix(c, sat * 1.12, uSatMode);
       float sh = fbm((vXZ + uWind) / 5200.0);
       c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
@@ -711,6 +739,17 @@ const posA = new Float32Array(totV * 3), colA = new Uint8Array(totV * 3),
 const cumV = new Float32Array(nB + 1), bCell = new Uint32Array(nB),
       bMxA = new Float32Array(nB), bMyA = new Float32Array(nB);
 const SUN = [-0.591, 0.806]; // normalized (-0.55, 0.75)
+// Accra's real roofscape: rust corrugated sheets dominate, then zinc,
+// plaster/sand, dark browns; tall buildings read as concrete.
+function roofColor(i, h) {
+  const r = (i * 2654435761 >>> 0) % 100;
+  const j = ((i * 40503) >>> 0) % 25 - 12; // per-building shade jitter
+  if (h > 14) return [206 + j, 200 + j, 189 + j];
+  if (r < 46) return [157 + j, 84 + j, 52 + j];
+  if (r < 64) return [175 + j, 179 + j, 181 + j];
+  if (r < 85) return [204 + j, 191 + j, 168 + j];
+  return [108 + j, 86 + j, 66 + j];
+}
 function ramp(h) {
   const t = Math.min(Math.max(Math.log(Math.max(h, 2.5) / 2.5) / Math.log(70 / 2.5), 0), 1);
   let r, g, b;
@@ -758,10 +797,10 @@ for (let oi = 0; oi < nB; oi++) {
     push(X1, top, Z1, cr, cg, cb, nx, 0, nz);
   }
   const tri = roofIdxCache[i];
-  const rr = Math.min(255, br * 1.15), rg = Math.min(255, bg * 1.15), rb = Math.min(255, bb * 1.15);
+  const [rr, rg, rb] = roofColor(i, h);
   for (let t = 0; t < tri.length; t += 3) {
-    // wind roof up: map CCW -> world needs reversal because z = -y
-    const a = tri[t], b = tri[t + 2], c = tri[t + 1];
+    // earcut output on our CCW rings + the z = -y flip already faces +Y; no swap
+    const a = tri[t], b = tri[t + 1], c = tri[t + 2];
     push(wx(p[a * 2]), top, wz(p[a * 2 + 1]), rr, rg, rb, 0, 1, 0);
     push(wx(p[b * 2]), top, wz(p[b * 2 + 1]), rr, rg, rb, 0, 1, 0);
     push(wx(p[c * 2]), top, wz(p[c * 2 + 1]), rr, rg, rb, 0, 1, 0);
@@ -843,6 +882,17 @@ const roadColors = [[97, 86, 70], [115, 103, 85], [131, 119, 100], [146, 135, 11
 const roadMesh = lineLayer(roads, rClass, c => roadColors[c], 1.2,
                            THREE.NormalBlending, 0.7);
 roadMesh.renderOrder = 1; scene.add(roadMesh);
+// minor street grid — the fine-grained fabric of the city
+const minorRoads = decodeLines(mLen, mStart, mDelta);
+const minorMesh = lineLayer(minorRoads, new Uint8Array(minorRoads.length),
+                            () => [158, 147, 128], 0.9, THREE.NormalBlending, 0.42);
+minorMesh.renderOrder = 1; scene.add(minorMesh);
+// airport + rail
+const xtras = decodeLines(xLen, xStart, xDelta);
+const xColors = [[212, 209, 200], [193, 189, 178], [96, 84, 74]]; // runway, taxiway, rail
+const xtraMesh = lineLayer(xtras, xClass, c => xColors[c], 1.4,
+                           THREE.NormalBlending, 0.95);
+xtraMesh.renderOrder = 1; scene.add(xtraMesh);
 const waterways = decodeLines(wLen, wStart, wDelta);
 const wwColors = { 0: [235, 110, 20], 1: [205, 90, 18], 2: [226, 96, 16],
                    3: [214, 64, 10], 4: [214, 64, 10] };
@@ -993,6 +1043,15 @@ $("tideSlider").oninput = e => { ivTide = +e.target.value / 100;
   $("tideVal").textContent = v < 20 ? "low" : v < 75 ? "normal" : v < 115 ? "high" : "storm surge"; };
 $("bloomChk").onchange = e => bloomOn = e.target.checked;
 $("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
+function setMapStyle(sat) {
+  uSatMode.value = sat ? 1 : 0;
+  $("styleSand").classList.toggle("on", !sat);
+  $("styleSat").classList.toggle("on", sat);
+  minorMesh.material.opacity = sat ? 0.25 : 0.42; // real roads show through imagery
+  roadMesh.material.opacity = sat ? 0.45 : 0.7;
+}
+$("styleSand").onclick = () => setMapStyle(false);
+$("styleSat").onclick = () => setMapStyle(true);
 for (const b of document.querySelectorAll("#spdBtns button"))
   b.onclick = () => { simRate = +b.dataset.s;
     document.querySelectorAll("#spdBtns button")
@@ -1064,7 +1123,7 @@ const AFFECTED = {
   "kokomlemle": { y: "2026", b: "Between the Odaw and the ring road; storm drains here feed straight into the overloaded channel." },
   "tudu": { y: "2026", b: "Commercial quarter below Kwame Nkrumah Avenue; flooded with the Makola area in June 2026." },
 };
-const TYPE_NAME = ["suburb", "neighbourhood", "locality"];
+const TYPE_NAME = ["suburb", "neighbourhood", "locality", "landmark"];
 let peakFlood = 0, peakBld = 0, selPlace = null, flyTween = null;
 const labelRoot = $("labels");
 const places = PLACES_RAW.map(p => {
@@ -1109,7 +1168,8 @@ function updateLabels() {
     let ok = shown < 42;
     if (ok) {
       const camD = camera.position.distanceTo(p.world);
-      const maxD = p.aff ? 26000 : p.t === 0 ? 20000 : p.t === 1 ? 7000 : 4500;
+      const maxD = p.aff ? 26000 : p.t === 0 ? 20000 : p.t === 1 ? 7000 :
+                   p.t === 3 ? 3400 : 4500;
       ok = camD < maxD;
       if (ok) {
         V.copy(p.world).project(camera);
@@ -1879,6 +1939,7 @@ addEventListener("resize", () => {
 window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   places, selectPlace, loadForecast, simulateWindow,
   setSpeed: v => { simRate = v; }, flash: () => { flashV = 1; },
+  bGeo, cumVArr: cumV,
   setRain: v => { raining = v; }, readouts: updateReadouts,
   tl: () => ({ snaps: snaps.length, series: series.length, review: reviewMode,
     reviewT, simClock, window: tlWindow() }),
