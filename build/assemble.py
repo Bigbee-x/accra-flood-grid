@@ -43,12 +43,6 @@ assert "</" not in places
 assert '["__PLACES__"]' in html
 html = html.replace('["__PLACES__"]', places)
 
-import base64
-with open(f"{ROOT}/data/satellite.jpg", "rb") as f:
-    sat = base64.b64encode(f.read()).decode()
-assert '"__SAT__"' in html
-html = html.replace('"__SAT__"', '"' + sat + '"')
-
 out = f"{ROOT}/dist/accra-flood-grid.html"
 with open(out, "w") as f:
     f.write(html)

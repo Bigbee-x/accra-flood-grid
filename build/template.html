@@ -58,7 +58,6 @@
   #btnRain:hover { background:#d14e08; }
   #btnRain.on { background:#a13c05; border-color:#a13c05; color:#ffe1cf; }
   #ivChips button.on { background:#fdeee0; border-color:#e8590c; color:#a13c05; font-weight:600; }
-  #styleChips button.on { background:#e7ecf1; border-color:#3f4854; color:#2b333c; font-weight:600; }
   .lbl.t3 { font-size:10px; color:#8a7f6e; font-style:italic; }
   input[type=range] { width:110px; accent-color:#e8590c; height:14px; }
   input[type=checkbox] { accent-color:#e8590c; }
@@ -92,7 +91,7 @@
     background:#e8590c; margin-right:4px; vertical-align:1px; }
   .lbl.wet { color:#1d6fd1; }
   .lbl.wet::before { background:#1d6fd1; }
-  #card { position:fixed; top:16px; right:16px; width:272px; z-index:20;
+  #card { position:fixed; top:64px; right:16px; width:272px; z-index:20;
     background:rgba(252,250,245,.95); border:1px solid #d8cec0; border-radius:12px;
     box-shadow:0 2px 14px rgba(80,65,45,.16); padding:12px 14px;
     font:12.5px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#2b2620; display:none; }
@@ -190,10 +189,6 @@
       <div id="qRes"></div>
     </div>
     <button id="tourBtn">&#9654; Guided tour of the flood</button>
-    <div class="btns" id="styleChips" style="margin:6px 0 2px">
-      <button id="styleSand" class="on">Sand-table</button>
-      <button id="styleSat">Satellite</button>
-    </div>
   </div>
   <div class="row"><span class="muted">Buildings</span><span class="val" id="cBld">–</span></div>
   <div class="row"><span class="muted">Drain + river segments</span><span class="val" id="cDrn">–</span></div>
@@ -351,7 +346,6 @@
 <script>const P = {"__PAYLOAD__":1};</script>
 <script>
 "use strict";
-const SAT_B64 = "__SAT__"; // baked Sentinel-2 true-color (assembler injects)
 // ---------- payload decode ----------
 function b64(s, T) {
   const bin = atob(s), n = bin.length, u8 = new Uint8Array(n);
@@ -444,16 +438,6 @@ for (let i = 0; i < GN * GN; i++) {
 }
 const auxTex = new THREE.DataTexture(auxData, GN, GN, THREE.RGBAFormat, THREE.UnsignedByteType);
 auxTex.needsUpdate = true; auxTex.minFilter = auxTex.magFilter = THREE.NearestFilter;
-// baked Sentinel-2 true-color texture (satellite mode)
-const satTex = new THREE.Texture();
-satTex.flipY = false; // north-up image; the shader maps v=0(south) -> 1-v itself
-satTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-{
-  const im = new Image();
-  im.onload = () => { satTex.image = im; satTex.needsUpdate = true; };
-  im.src = "data:image/jpeg;base64," + SAT_B64;
-}
-const uSatMode = { value: 0 };
 
 // ---------- water sim (virtual pipes, ping-pong RGBA32F) ----------
 function makeRT() {
@@ -615,7 +599,7 @@ function gridGeometry() {
 const grid = gridGeometry();
 const terrMat = new THREE.ShaderMaterial({
   uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex },
-    uCloud: uCloudU, uWind: uWindU, uSat: { value: satTex }, uSatMode: uSatMode },
+    uCloud: uCloudU, uWind: uWindU },
   vertexShader: `
     uniform sampler2D uTerr; varying vec2 vUv; varying float vE; varying vec2 vXZ;
     void main(){
@@ -625,7 +609,7 @@ const terrMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform sampler2D uAux, uSat; uniform float uCloud, uSatMode; uniform vec2 uWind;
+    uniform sampler2D uAux; uniform float uCloud; uniform vec2 uWind;
     varying vec2 vUv; varying float vE; varying vec2 vXZ;
     ${maskFns}
     ${NOISE}
@@ -640,9 +624,6 @@ const terrMat = new THREE.ShaderMaterial({
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
       c = mix(c, vec3(0.678, 0.741, 0.541), bit3(m) * 0.55);
       c = mix(c, vec3(0.780, 0.773, 0.749), bit4(m) * 0.8);
-      // satellite mode replaces the cartographic ground entirely
-      vec3 sat = texture2D(uSat, vec2(vUv.x, 1.0 - vUv.y)).rgb;
-      c = mix(c, sat * 1.12, uSatMode);
       float sh = fbm((vXZ + uWind) / 5200.0);
       c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
@@ -1043,15 +1024,6 @@ $("tideSlider").oninput = e => { ivTide = +e.target.value / 100;
   $("tideVal").textContent = v < 20 ? "low" : v < 75 ? "normal" : v < 115 ? "high" : "storm surge"; };
 $("bloomChk").onchange = e => bloomOn = e.target.checked;
 $("scanChk").onchange = e => uScan.value = e.target.checked ? 1 : 0;
-function setMapStyle(sat) {
-  uSatMode.value = sat ? 1 : 0;
-  $("styleSand").classList.toggle("on", !sat);
-  $("styleSat").classList.toggle("on", sat);
-  minorMesh.material.opacity = sat ? 0.25 : 0.42; // real roads show through imagery
-  roadMesh.material.opacity = sat ? 0.45 : 0.7;
-}
-$("styleSand").onclick = () => setMapStyle(false);
-$("styleSat").onclick = () => setMapStyle(true);
 for (const b of document.querySelectorAll("#spdBtns button"))
   b.onclick = () => { simRate = +b.dataset.s;
     document.querySelectorAll("#spdBtns button")
