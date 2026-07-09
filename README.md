@@ -1,6 +1,6 @@
 # Accra // flood grid
 
-An interactive 3D flood simulation of Accra's Odaw basin — **one self-contained HTML file**, no server, no dependencies, works offline (only the optional live-forecast feature calls the internet). 209,457 real building footprints, the city's mapped drainage network, real terrain, a 210-place gazetteer, and a GPU shallow-water simulation of the June 29, 2026 storm (~140 mm in 24h, the worst June on record).
+An interactive 3D flood simulation of Accra's Odaw basin — **one self-contained HTML file**, no server, no dependencies, works offline (only the optional live-forecast feature calls the internet). 491,187 real building footprints (OSM hand-mapping plus Google Open Buildings gap-fill where OSM is sparse), the city's mapped drainage network, real terrain, a 284-place gazetteer, and a GPU shallow-water simulation of the June 29, 2026 storm (~140 mm in 24h, the worst June on record).
 
 Open [`dist/accra-flood-grid.html`](dist/accra-flood-grid.html) in any modern browser, press **start storm**, and watch the water obey Accra's actual topography: it pools at Alajo, traces the Odaw corridor through Avenor and Adabraka, and floods Sakumono/Klagon and Mallam — the same neighborhoods in the real June 2026 damage reports. Nobody told the simulation where to flood.
 
@@ -44,7 +44,7 @@ Interventions don't abolish the flood — they cut its reach in half and get hom
 OSM Ghana extract ─┐
 Copernicus GLO-30 ─┼─→ Python packer ─→ one 11 MB HTML
 storm presets ─────┘      (quantize, delta-encode, base64)
-                            ├─ three.js sand-table city model (terrain + 209k extruded buildings)
+                            ├─ three.js sand-table city model (terrain + 491k extruded buildings)
                             ├─ GPU shallow-water sim (virtual pipes, ping-pong shaders, 512² @ 43 m)
                             └─ scenario UI with live readouts
 ```
@@ -80,6 +80,7 @@ This is a **basin-scale explainer, not parcel-level prediction**. 30 m terrain a
 ## Data & attribution
 
 - Building footprints, roads, drains: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, ODbL. Extract via [Geofabrik](https://download.geofabrik.de/).
+- Additional building footprints in under-mapped districts: [Google Open Buildings](https://sites.research.google/gr/open-buildings/) v3 (CC BY-4.0), confidence ≥ 0.7, added only where OSM coverage is sparse.
 - Terrain: [Copernicus GLO-30 DEM](https://registry.opendata.aws/copernicus-dem/) © ESA / European Commission.
 - Rainfall and impact figures: Ghana Meteorological Agency and NADMO totals as reported in Ghanaian press, June–July 2026.
 - Libraries: [three.js](https://threejs.org/) r147, [earcut](https://github.com/mapbox/earcut) (both inlined; MIT).

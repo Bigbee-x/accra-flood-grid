@@ -112,9 +112,13 @@ class PolyEncoder:
                 np.array(self.deltas, "<i2"))
 
 
-# ---- buildings ----
+# ---- buildings: OSM first, then Google Open Buildings gap-fill ----
 b_enc, b_heights = PolyEncoder(), []
 dens = np.zeros((GRID_N, GRID_N), np.float32)  # north-up, like elev
+BLK = 128  # coarse density blocks (~173 m) for "is this area OSM-mapped?"
+osm_blocks = np.zeros((BLK, BLK), np.int32)
+osm_near = set()  # 20 m proximity cells of OSM centroids (double-placement guard)
+blk = cell * GRID_N / BLK
 n_in, n_kept, n_tagged = 0, 0, 0
 for rec in load("buildings"):
     n_in += 1
@@ -130,6 +134,10 @@ for rec in load("buildings"):
     gj = int((y1 - c.y) / cell)
     if 0 <= gi < GRID_N and 0 <= gj < GRID_N:
         dens[gj, gi] += poly.area
+    bi, bj = int((c.x - x0) / blk), int((c.y - y0) / blk)
+    if 0 <= bi < BLK and 0 <= bj < BLK:
+        osm_blocks[bj, bi] += 1
+    osm_near.add((int((c.x - x0) / 20), int((c.y - y0) / 20)))
     poly = poly.simplify(1.2, preserve_topology=True)
     q = quantize(list(poly.exterior.coords))
     if len(q) < 3:
@@ -140,8 +148,48 @@ for rec in load("buildings"):
     b_enc.add(q)
     b_heights.append(h)
     n_kept += 1
-print(f"buildings: {n_in} in, {n_kept} kept, {n_tagged} with real height "
+print(f"buildings (OSM): {n_in} in, {n_kept} kept, {n_tagged} with real height "
       f"({time.time()-t0:.0f}s)")
+
+# Open Buildings v3 (CC BY-4.0): add ML footprints only where OSM is sparse
+n_ob_in = n_ob_kept = 0
+try:
+    ob_iter = load("openbuildings")
+except FileNotFoundError:
+    ob_iter = []
+for rec in ob_iter:
+    n_ob_in += 1
+    poly = Polygon(to_utm(rec["c"]))
+    if not poly.is_valid:
+        poly = poly.buffer(0)
+        if poly.is_empty or poly.geom_type != "Polygon":
+            continue
+    if poly.area < 25.0:
+        continue
+    c = poly.centroid
+    bi, bj = int((c.x - x0) / blk), int((c.y - y0) / blk)
+    if not (0 <= bi < BLK and 0 <= bj < BLK):
+        continue
+    if osm_blocks[bj, bi] >= 5:
+        continue  # OSM already mapped this block properly
+    px, py_ = int((c.x - x0) / 20), int((c.y - y0) / 20)
+    if any((px + dx, py_ + dy) in osm_near
+           for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+        continue  # sits on top of a mapped building
+    gi = int((c.x - x0) / cell)
+    gj = int((y1 - c.y) / cell)
+    if 0 <= gi < GRID_N and 0 <= gj < GRID_N:
+        dens[gj, gi] += poly.area
+    poly = poly.simplify(1.2, preserve_topology=True)
+    q = quantize(list(poly.exterior.coords))
+    if len(q) < 3:
+        continue
+    b_enc.add(q)
+    b_heights.append(0.0)
+    n_ob_kept += 1
+n_kept += n_ob_kept
+print(f"buildings (Open Buildings gap-fill): {n_ob_kept} added of {n_ob_in} "
+      f"candidates -> {n_kept} total ({time.time()-t0:.0f}s)")
 
 # ---- roads / waterways: clip to grid rect ----
 WCLASS = {"drain": 0, "ditch": 1, "canal": 1, "stream": 2, "river": 3}
