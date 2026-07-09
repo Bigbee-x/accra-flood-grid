@@ -419,6 +419,8 @@ const uTime = { value: 0 }, uCam = { value: new THREE.Vector3() },
 // atmosphere: shared cloud cover, lightning flash, wind-driven noise offset
 const uCloudU = { value: 0.12 }, uFlashU = { value: 0 },
       windOff = new THREE.Vector2(0, 0), uWindU = { value: windOff };
+// selected-place highlight painted on the terrain (x, z, radius) + on/off
+const uSel = { value: new THREE.Vector3(0, 0, 400) }, uSelOn = { value: 0 };
 const NOISE = `
   float nhash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
@@ -600,7 +602,7 @@ function gridGeometry() {
 const grid = gridGeometry();
 const terrMat = new THREE.ShaderMaterial({
   uniforms: { uTerr: { value: terrTex }, uAux: { value: auxTex },
-    uCloud: uCloudU, uWind: uWindU },
+    uCloud: uCloudU, uWind: uWindU, uSel, uSelOn, uTime },
   vertexShader: `
     uniform sampler2D uTerr; varying vec2 vUv; varying float vE; varying vec2 vXZ;
     void main(){
@@ -610,7 +612,8 @@ const terrMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: `
-    uniform sampler2D uAux; uniform float uCloud; uniform vec2 uWind;
+    uniform sampler2D uAux; uniform float uCloud, uSelOn, uTime;
+    uniform vec2 uWind; uniform vec3 uSel;
     varying vec2 vUv; varying float vE; varying vec2 vXZ;
     ${maskFns}
     ${NOISE}
@@ -625,6 +628,15 @@ const terrMat = new THREE.ShaderMaterial({
       c = mix(c, vec3(0.680, 0.730, 0.590), bit2(m) * 0.6);
       c = mix(c, vec3(0.678, 0.741, 0.541), bit3(m) * 0.55);
       c = mix(c, vec3(0.780, 0.773, 0.749), bit4(m) * 0.8);
+      // selected-place highlight: soft wash + breathing rim, follows the terrain
+      float sd = distance(vXZ, uSel.xy);
+      float rimW = uSel.z * 0.045;
+      float rim = smoothstep(uSel.z - rimW * 2.2, uSel.z - rimW, sd)
+                * (1.0 - smoothstep(uSel.z, uSel.z + rimW, sd));
+      float fill = 1.0 - smoothstep(uSel.z * 0.45, uSel.z, sd);
+      float breathe = 0.72 + 0.28 * sin(uTime * 2.1);
+      c = mix(c, vec3(0.91, 0.36, 0.06),
+              uSelOn * min(1.0, fill * 0.10 + rim * 0.62 * breathe));
       float sh = fbm((vXZ + uWind) / 5200.0);
       c *= 1.0 - 0.26 * smoothstep(0.52, 0.9, sh) * uCloud - 0.10 * uCloud;
       gl_FragColor = vec4(c, 1.0);
@@ -1114,6 +1126,20 @@ const places = PLACES_RAW.map(p => {
   el.onclick = () => selectPlace(pl);
   return pl;
 });
+// estimate each place's footprint radius: half the distance to its nearest
+// peer place (same or broader tier), so sprawling suburbs get wide circles
+// and dense central quarters get tight ones
+for (const p of places) {
+  if (p.t === 3) { p.rad = 160; continue; } // landmarks: building-scale
+  let nd = 1e18;
+  for (const q of places) {
+    if (q === p || q.t > Math.max(p.t, 1)) continue;
+    const dx = q.wx - p.wx, dz = q.wz - p.wz, d = dx * dx + dz * dz;
+    if (d < nd) nd = d;
+  }
+  p.rad = Math.min(1500, Math.max(320, Math.sqrt(nd) * 0.62));
+  if (p.t === 0) p.rad = Math.max(p.rad, 520); // suburbs never read tiny
+}
 const placesSorted = [...places].sort((a, b) =>
   (a.aff ? 0 : 1) - (b.aff ? 0 : 1) || a.t - b.t);
 function trackPlaces() {
@@ -1162,15 +1188,9 @@ function updateLabels() {
     if (ok) shown++;
   }
 }
-const marker = new THREE.Mesh(
-  new THREE.RingGeometry(70, 84, 48),
-  new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.85,
-    side: THREE.DoubleSide, depthWrite: false }));
-marker.rotation.x = -Math.PI / 2; marker.visible = false; marker.renderOrder = 5;
-scene.add(marker);
 function selectPlace(p) {
   selPlace = p;
-  marker.position.set(p.wx, p.gy + 2, p.wz); marker.visible = true;
+  uSel.value.set(p.wx, p.wz, p.rad || 400); uSelOn.value = 1;
   $("cardName").textContent = p.n;
   $("cardChips").innerHTML =
     `<span class="chip ty">${TYPE_NAME[p.t]}</span>` +
@@ -1196,7 +1216,7 @@ function refreshCard() {
   $("cardPeak").textContent = selPlace.peak > 0.05 ? selPlace.peak.toFixed(2) + " m" : "–";
 }
 $("cardX").onclick = () => {
-  $("card").style.display = "none"; selPlace = null; marker.visible = false; };
+  $("card").style.display = "none"; selPlace = null; uSelOn.value = 0; };
 renderer.domElement.addEventListener("pointerdown", () => { flyTween = null; });
 const qEl = $("q"), qRes = $("qRes");
 function runSearch() {
@@ -1542,7 +1562,7 @@ function endTour() {
   $("btnRain").innerHTML = "&#9654; start storm"; $("btnRain").classList.remove("on");
   $("tour").style.display = "none";
   $("tourBtn").innerHTML = "&#9654; Guided tour of the flood";
-  $("card").style.display = "none"; selPlace = null; marker.visible = false;
+  $("card").style.display = "none"; selPlace = null; uSelOn.value = 0;
 }
 $("tourBtn").onclick = () => tourActive ? endTour() : startTour();
 $("tourNext").onclick = () => tourStop();
@@ -1855,7 +1875,6 @@ function animate() {
     camera.position.lerpVectors(flyTween.fromP, flyTween.toP, e);
     if (k >= 1) flyTween = null;
   }
-  if (marker.visible) marker.scale.setScalar(1 + 0.18 * Math.sin(uTime.value * 3.5));
   if (chopperActive) updateChopper(dt);
   if (tourActive) {
     tourStopT += dt;
