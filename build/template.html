@@ -80,6 +80,16 @@
   .chip { display:inline-block; font-size:10px; border-radius:9px; padding:1px 7px; margin:0 4px 4px 0; }
   .chip.aff { background:#fdeee0; color:#a13c05; border:1px solid #f0b28a; }
   .chip.ty { background:#f1ece1; color:#7a6f60; border:1px solid #e0d7c7; }
+  #card .cw { display:none; font-size:11.5px; color:#0b5a8a; line-height:1.5; margin:7px 0 0; }
+  #card .ct { display:none; font-size:11.5px; color:#a32d2d; line-height:1.5; margin:7px 0 0; }
+  #cardLinks { display:none; flex-wrap:wrap; gap:6px; margin:9px 0 3px; }
+  #cardLinks a { font-size:10.5px; color:#a13c05; background:#fdeee0; border:1px solid #f0b28a;
+    padding:2px 9px; border-radius:9px; text-decoration:none; }
+  #cardLinks a:hover { background:#fbdfc9; }
+  #tourLinks { display:none; flex-wrap:wrap; gap:6px; }
+  #tourLinks a { font-size:10.5px; color:#a13c05; background:#fdeee0; border:1px solid #f0b28a;
+    padding:2px 9px; border-radius:9px; text-decoration:none; }
+  #tourLinks a:hover { background:#fbdfc9; }
   #labels { position:fixed; inset:0; pointer-events:none; z-index:5; overflow:hidden; }
   .lbl { position:absolute; transform:translate(-50%,-100%); pointer-events:auto; cursor:pointer;
     font:11px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#5a5044; white-space:nowrap; display:none;
@@ -302,6 +312,9 @@
   <h2 id="cardName"></h2>
   <div id="cardChips"></div>
   <div class="blurb" id="cardBlurb"></div>
+  <div class="cw" id="cardWater"></div>
+  <div class="ct" id="cardToll"></div>
+  <div id="cardLinks"></div>
   <div class="stat"><span class="muted">Water here now</span><span class="val" id="cardNow">–</span></div>
   <div class="stat"><span class="muted">Peak this run</span><span class="val" id="cardPeak">–</span></div>
   <div class="stat"><span class="muted">Ground elevation</span><span class="val" id="cardElev">–</span></div>
@@ -310,6 +323,7 @@
 <div id="tour">
   <div id="tourCap"><b id="tourName"></b> <span id="tourYr"></span>
     <span id="tourTxt"></span></div>
+  <div id="tourLinks"></div>
   <div id="tourNav">
     <button id="tourPrev">&#8249; back</button>
     <span id="tourProg">1 / 6</span>
@@ -1080,33 +1094,109 @@ function updateReadouts(force) {
 // ---------- places: gazetteer, labels, search, info card ----------
 const PLACES_RAW = ["__PLACES__"];
 const AFFECTED = {
-  "kwame nkrumah circle": { y: "2015 · 2026", b: "Accra's transit heart. On 3 June 2015, floodwater pooling here met a fuel-station fire — over 150 people died in one night. It flooded again on the storm's 11th anniversary in June 2026." },
-  "alajo": { y: "2015 · 2026", b: "Sits where the Odaw meets its Nima and Onyasia tributaries — among the first places under water in nearly every major storm, including 29 June 2026." },
-  "kaneshie": { y: "2026", b: "The market and First Light corridor flood routinely; runoff from the western ridge overwhelms the drains. Submerged in the June 2026 storms." },
-  "odawna": { y: "2015 · 2026", b: "Market quarter on the Odaw channel by Circle. The river overtopped here in June 2026, flooding shops and stranding traders." },
-  "adabraka": { y: "2015 · 2026", b: "Low-lying quarter beside the Odaw floodplain; homes flooded on 3 June 2026 — eleven years to the day after the 2015 disaster." },
-  "avenor": { y: "2026", b: "Odaw corridor community pressed against the channel — every extra half-metre of river finds Avenor first." },
-  "achimota": { y: "2026", b: "Upstream Odaw. Paved-over wetland here sends water downtown faster; flooded 29 June 2026." },
-  "accra new town": { y: "2026", b: "Drains feeding the Odaw back up into these streets when the main channel runs full." },
-  "nima": { y: "2026", b: "The Nima drain, a major Odaw tributary, overflows into dense housing during cloudbursts." },
-  "mamobi": { y: "2026", b: "Shares the overloaded Nima drain; flash floods rise and fall within hours here." },
-  "kotobabi": { y: "2026", b: "Tributary drains through Kotobabi spill when the Odaw backs up downstream." },
-  "old fadama": { y: "chronic", b: "Informal settlement on the Korle Lagoon edge — the most flood-exposed community in Accra, inundated in almost every major rain." },
-  "agbogbloshie": { y: "chronic", b: "Market and scrapyard on the lagoon floodplain, where the Odaw meets Korle Lagoon; water backs up here whenever the outfall chokes." },
-  "korle gonno": { y: "2026", b: "Coastal, beside the lagoon outfall — at high tide the sea can hold the floodwater in." },
-  "chorkor": { y: "2026", b: "Dense coastal community with minimal formal drainage; flooded in the June 2026 storms." },
-  "dansoman": { y: "2026", b: "Flat coastal plain with chronic drainage problems; flooded in the June 2026 storms." },
-  "mallam": { y: "2026", b: "The Mallam junction bowl collects runoff from the Weija hills; flooded June 2026." },
-  "gbawe": { y: "2026", b: "Fast-growing hillside suburb where construction outpaced drainage; flooded June 2026." },
-  "santa maria": { y: "2026", b: "North-western hotspot where unplanned growth left few working drains." },
-  "sowutuom": { y: "2026", b: "Same north-western basin as Santa Maria; streets turn to streams in heavy rain." },
-  "christian village": { y: "2026", b: "Flooded in the June 2026 rains; sits against the Onyasia stream corridor." },
-  "madina": { y: "2026", b: "North-eastern hub; flooded June 2026 — its runoff drains via the Onyasia toward the Odaw." },
-  "legon": { y: "2026", b: "University of Ghana area; parts flooded in the June 2026 rains." },
-  "abeka": { y: "2026", b: "West bank of the Odaw; the Abeka drains surcharge when the river runs high." },
-  "asylum down": { y: "2015 · 2026", b: "Ring-road quarter on the Odaw floodplain, repeatedly flooded in the June storms." },
-  "kokomlemle": { y: "2026", b: "Between the Odaw and the ring road; storm drains here feed straight into the overloaded channel." },
-  "tudu": { y: "2026", b: "Commercial quarter below Kwame Nkrumah Avenue; flooded with the Makola area in June 2026." },
+  "kwame nkrumah circle": { y: "2015 \u00b7 2026",
+    b: "Accra's transit heart. On 3 June 2015, crowds sheltering from the flood at a filling station died when fuel spread across the water and ignited \u2014 more than 150 people were killed in one night. In June 2026, rescues here were done by boat.",
+    w: "The Odaw trunk channel runs beside the interchange; when the Odawna bend overtops, water backs into the transit hub within the hour.",
+    k: "3 June 2015: 150+ killed here. 29 June 2026: boat rescues.",
+    v: [["Boat rescue at Circle \u2014 video", "https://www.youtube.com/watch?v=C_iahiwmNCQ"],
+        ["Ten years after June 3", "https://citinewsroom.com/2025/06/june-3-disaster-ghana-marks-10-years-since-deadly-flood-and-fire/"]] },
+  "alajo": { y: "2015 \u00b7 2026",
+    b: "Sits where the Odaw meets its Nima and Onyasia tributaries \u2014 water converges from three directions, so Alajo goes under in nearly every major storm.",
+    w: "Flow arrives at once down the Odaw main stem and the Nima and Onyasia drains; the railway embankment then holds it in the quarter.",
+    k: "29 June 2026: a man drowned and others died when floodwater reached indoor wiring; a body was recovered on the railway line.",
+    v: [["Alajo electrocution deaths", "https://www.gbcghanaonline.com/general/alajo-flood-tragedy-three-die-from-electrocution/2026/"],
+        ["Body found at the railway", "https://www.modernghana.com/news/1506391/flood-victim-found-dead-along-alajo-railway-track.html"]] },
+  "odawna": { y: "2015 \u00b7 2026",
+    b: "Market quarter pressed against the Odaw at its tightest bend. On 29 June 2026 the river overtopped into the stalls, trapping traders.",
+    w: "The Odaw narrows and turns here \u2014 everything the upstream basin sheds passes this single point.",
+    k: "29 June 2026: four people died here; about 300 were rescued from the market area.",
+    v: [["The Pulse: Accra battles fresh floods", "https://www.youtube.com/watch?v=71dBfDF2wN0"]] },
+  "alogboshie": { y: "2026",
+    b: "Upstream Odaw community below the Achimota ridge, where the young channel runs shallow between houses.",
+    w: "Headwater flow off the Achimota ridge funnels straight through the settlement.",
+    k: "29 June 2026: a mother and her child were recovered here.",
+    v: [["NADMO breakdown of the toll", "https://yen.com.gh/ghana/307237-death-toll-june-29-flooding-rises-nadmo-shares-breakdown-deaths-by-region/"]] },
+  "adabraka": { y: "2015 \u00b7 2026",
+    b: "Low-lying quarter beside the Odaw floodplain; homes flooded on 3 June 2026 \u2014 eleven years to the day after the 2015 disaster.",
+    w: "Overflow from the Odaw's east bank ponds against the ring road embankment." },
+  "avenor": { y: "2026",
+    b: "Odaw corridor community pressed against the channel \u2014 every extra half-metre of river finds Avenor first.",
+    w: "Direct overbank spill from the Odaw main channel." },
+  "achimota": { y: "2026",
+    b: "Upstream Odaw. Paved-over retention land here sends the ridge's runoff downtown faster with every building added.",
+    w: "Runoff from the forest ridge that once soaked in now runs straight to the channel.",
+    k: "29 June 2026: one death was recorded here." },
+  "accra new town": { y: "2026",
+    b: "Drains feeding the Odaw back up into these streets when the main channel runs full.",
+    w: "Local drains can only empty when the Odaw is low \u2014 in a storm they flow backwards." },
+  "nima": { y: "2026",
+    b: "Dense housing along the Nima storm drain, one of the Odaw's biggest tributaries.",
+    w: "The Nima drain runs straight through the quarter and overtops in cloudbursts." },
+  "mamobi": { y: "2026",
+    b: "Shares the overloaded Nima drain; flash floods rise and fall within hours here.",
+    w: "Same channel as Nima \u2014 the drain surcharges upstream first." },
+  "kotobabi": { y: "2026",
+    b: "Tributary drains through Kotobabi spill when the Odaw backs up downstream.",
+    w: "Backwater from the Odaw stalls the local drains." },
+  "old fadama": { y: "chronic",
+    b: "Informal settlement on the Korle Lagoon edge \u2014 the most flood-exposed community in Accra.",
+    w: "Sits at the basin's lowest point: river from above, lagoon and tide from below.",
+    k: "Inundated in nearly every major rain; June 2026 left much of the settlement in water." },
+  "agbogbloshie": { y: "chronic",
+    b: "Market and scrapyard on the lagoon floodplain, where the Odaw meets Korle Lagoon.",
+    w: "The Odaw's dead end \u2014 when the outfall chokes or the tide is high, everything backs up into the market." },
+  "korle gonno": { y: "2026",
+    b: "Coastal, beside the lagoon outfall \u2014 at high tide the sea can hold the floodwater in.",
+    w: "Tidewater meets floodwater at the outfall gates." },
+  "chorkor": { y: "2026",
+    b: "Dense coastal community with minimal formal drainage; flooded in the June 2026 storms.",
+    w: "Sheet runoff to the sea with almost no engineered channels." },
+  "dansoman": { y: "2026",
+    b: "Flat coastal plain with chronic drainage problems; flooded in the June 2026 storms.",
+    w: "Nearly no gradient \u2014 water that arrives here has nowhere to drain." },
+  "mallam": { y: "2026",
+    b: "The Mallam junction bowl collects runoff from the Weija hills; flooded badly on 29 June 2026.",
+    w: "NADMO attributes the June 2026 flooding here to overflowing streams and failed drainage \u2014 not the Weija dam spillage.",
+    v: [["The Weija-Gbawe flooding debate", "https://www.ghanaweb.com/GhanaHomePage/NewsArchive/Dam-spillage-not-the-cause-of-flood-Weija-Gbewa-NADMO-director-2041068"]] },
+  "gbawe": { y: "2026",
+    b: "Fast-growing hillside suburb where construction outpaced drainage; flooded June 2026.",
+    w: "Hillside streams squeezed by new construction; NADMO points to drainage failure rather than the dam. Downhill at Tetegu and Oblogo, the May 2026 Weija spillage submerged whole streets.",
+    v: [["Weija dam spillage floods \u2014 video", "https://www.youtube.com/watch?v=8zAuO5f-LI4"]] },
+  "santa maria": { y: "2026",
+    b: "North-western hotspot where unplanned growth left few working drains.",
+    w: "Street runoff with no trunk drain to receive it." },
+  "sowutuom": { y: "2026",
+    b: "Same north-western basin as Santa Maria; streets turn to streams in heavy rain.",
+    w: "Shares Santa Maria's basin \u2014 the two flood together." },
+  "christian village": { y: "2026",
+    b: "Flooded in the June 2026 rains; sits against the Onyasia stream corridor.",
+    w: "The Onyasia stream wraps the village on two sides." },
+  "madina": { y: "2026",
+    b: "North-eastern hub; flooded June 2026 \u2014 its runoff drains via the Onyasia toward the Odaw.",
+    w: "Headwaters of the Onyasia; what floods Madina reaches Alajo hours later." },
+  "legon": { y: "2026",
+    b: "University of Ghana area; parts flooded in the June 2026 rains.",
+    w: "Campus runoff feeds the Onyasia stream system." },
+  "abeka": { y: "2026",
+    b: "West bank of the Odaw; the Abeka drains surcharge when the river runs high.",
+    w: "Backwater from the Odaw main channel." },
+  "asylum down": { y: "2015 \u00b7 2026",
+    b: "Ring-road quarter on the Odaw floodplain, repeatedly flooded in the June storms.",
+    w: "Overbank spill from the same reach that took Circle in 2015." },
+  "kokomlemle": { y: "2026",
+    b: "Between the Odaw and the ring road; storm drains here feed straight into the overloaded channel.",
+    w: "Drains discharge into the Odaw \u2014 or back out of it, in a storm." },
+  "tudu": { y: "2026",
+    b: "Commercial quarter below Kwame Nkrumah Avenue; flooded with the Makola area in June 2026.",
+    w: "Downhill terminus of the avenue's runoff." },
+  "kaneshie": { y: "2026",
+    b: "The market and First Light corridor flood routinely; submerged again in the June 2026 storms.",
+    w: "Runoff pours off the western ridge into the First Light underpass and the Kaneshie drain, which chokes where it ducks under the market.",
+    v: [["Citi: flood disaster report \u2014 video", "https://www.modernghana.com/videonews/cititv/3/674515"]] },
+  "tse addo": { y: "2026",
+    b: "Eastern lowland estate off the Spintex corridor; badly hit on 29 June 2026.",
+    w: "Flat coastal outflow with undersized culverts under Spintex Road.",
+    k: "29 June 2026: about 105 people were rescued here." },
 };
 const TYPE_NAME = ["suburb", "neighbourhood", "locality", "landmark"];
 let peakFlood = 0, peakBld = 0, selPlace = null, flyTween = null;
@@ -1197,6 +1287,14 @@ function selectPlace(p) {
     (p.aff ? `<span class="chip aff">flooded ${p.aff.y}</span>` : "");
   $("cardBlurb").textContent = p.aff ? p.aff.b :
     "No major incident on record here in this dataset — start a storm and watch how it fares.";
+  const A = p.aff || {};
+  $("cardWater").innerHTML = A.w ? "<b>The water:</b> " + A.w : "";
+  $("cardWater").style.display = A.w ? "block" : "none";
+  $("cardToll").innerHTML = A.k ? "<b>The toll:</b> " + A.k : "";
+  $("cardToll").style.display = A.k ? "block" : "none";
+  $("cardLinks").innerHTML = (A.v || []).map(l =>
+    `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]} &#8599;</a>`).join("");
+  $("cardLinks").style.display = A.v ? "flex" : "none";
   $("cardElev").textContent = p.gy.toFixed(0) + " m";
   refreshCard();
   $("card").style.display = "block";
@@ -1518,12 +1616,13 @@ $("cmpWipe").addEventListener("pointerdown", e => {
 
 // ---------- guided tour ----------
 const TOUR = [
-  { p: "Kwame Nkrumah Circle", c: "3 June 2015 — floodwater pooling here met a fuel-station fire. Over 150 people died in one night. The disaster that named Accra's flood era." },
-  { p: "Alajo", c: "Where the Odaw gathers the Nima, Onyasia and Ado streams. Among the first neighbourhoods under water in almost every storm." },
-  { p: "Old Fadama", c: "On the edge of the Korle Lagoon — the most flood-exposed community in the city, inundated in nearly every heavy rain." },
-  { p: "Agbogbloshie", c: "Where the Odaw finally meets the lagoon and the water has nowhere left to go. It backs up whenever the outfall chokes." },
-  { p: "Kaneshie", c: "Runoff off the western ridge overwhelms the drains; the market and First Light corridor flood again and again." },
-  { p: "Adabraka", c: "Flooded on 3 June 2026 — eleven years to the day after the 2015 catastrophe. Same river, same story." },
+  { p: "Kwame Nkrumah Circle", c: "3 June 2015 \u2014 crowds sheltering from the flood at a filling station died when fuel spread across the water and ignited. More than 150 people were killed in one night. In June 2026, rescues here were done by boat." },
+  { p: "Odawna", c: "The Odaw's tightest bend. On 29 June 2026 the river overtopped into the market \u2014 four people died here, and about 300 were pulled to safety." },
+  { p: "Alajo", c: "Three streams meet the Odaw here, so Alajo floods first in every storm. On 29 June 2026 a man drowned, and others died when the water reached their home's wiring." },
+  { p: "Old Fadama", c: "On the Korle Lagoon's edge \u2014 the most exposed community in the city: river from above, lagoon and tide from below." },
+  { p: "Agbogbloshie", c: "The Odaw's dead end. When the lagoon outfall chokes or the tide runs high, everything backs up into the market." },
+  { p: "Kaneshie", c: "Runoff off the western ridge drowns the First Light corridor and the market, storm after storm." },
+  { p: "Adabraka", c: "Flooded 3 June 2026 \u2014 eleven years to the day after 2015. Across the city that June: at least 12 dead, some 500 rescued, more than 54,000 affected." },
 ];
 const STOP_DUR = 7.0;
 let tourActive = false, tourIdx = -1, tourStopT = 0;
@@ -1538,6 +1637,10 @@ function tourStop() {
   $("tourName").textContent = item.p;
   $("tourYr").textContent = pl && pl.aff ? "· flooded " + pl.aff.y : "";
   $("tourTxt").textContent = item.c;
+  const tv = (pl && pl.aff && pl.aff.v) || [];
+  $("tourLinks").innerHTML = tv.map(l =>
+    `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]} &#8599;</a>`).join("");
+  $("tourLinks").style.display = tv.length ? "flex" : "none";
   $("tourProg").textContent = (tourIdx + 1) + " / " + TOUR.length;
 }
 function startTour() {
@@ -1545,7 +1648,7 @@ function startTour() {
   if (chopperActive) exitChopper();
   $("btnReset").click(); $("p2026").click();
   reviewMode = false; $("tlLive").classList.add("on");
-  raining = true; simRate = 210; // paces the 6-stop tour to finish near peak (~T+2.5h)
+  raining = true; simRate = 165; // paces the 7-stop tour to finish near peak
   document.querySelectorAll("#spdBtns button").forEach(x => x.classList.remove("on"));
   $("btnRain").innerHTML = "&#9646;&#9646; pause storm"; $("btnRain").classList.add("on");
   $("tourBtn").innerHTML = "&#9632; Stop tour";
