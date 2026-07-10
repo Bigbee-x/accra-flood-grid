@@ -90,6 +90,18 @@
   #tourLinks a { font-size:10.5px; color:#a13c05; background:#fdeee0; border:1px solid #f0b28a;
     padding:2px 9px; border-radius:9px; text-decoration:none; }
   #tourLinks a:hover { background:#fbdfc9; }
+  #lb { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+    background:rgba(22,17,12,.8); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); }
+  #lbBox { width:min(940px, 93vw); background:#171310; border-radius:14px; overflow:hidden;
+    box-shadow:0 12px 60px rgba(0,0,0,.55); }
+  #lbHead { display:flex; align-items:center; justify-content:space-between;
+    padding:10px 16px; color:#f2ece2; font:600 13.5px "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  #lbX { background:none; border:none; color:#c9beac; font-size:20px; cursor:pointer;
+    flex:0 0 auto; padding:2px 6px; }
+  #lbX:hover { color:#fff; }
+  #lbFrame { position:relative; width:100%; aspect-ratio:16/9; background:#000; }
+  #lbFrame iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  #lbNote { padding:8px 16px 12px; color:#8f8471; font:10.5px "Helvetica Neue",Helvetica,Arial,sans-serif; }
   #labels { position:fixed; inset:0; pointer-events:none; z-index:5; overflow:hidden; }
   .lbl { position:absolute; transform:translate(-50%,-100%); pointer-events:auto; cursor:pointer;
     font:11px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#5a5044; white-space:nowrap; display:none;
@@ -342,6 +354,15 @@
     &nbsp; <b>&uarr;</b>/<b>&darr;</b> climb &middot; descend</div>
 </div>
 <div id="toast"></div>
+
+<div id="lb">
+  <div id="lbBox">
+    <div id="lbHead"><span id="lbTitle"></span><button id="lbX" aria-label="Close video">&#10005;</button></div>
+    <div id="lbFrame"><iframe id="lbIf" allow="autoplay; encrypted-media; picture-in-picture"
+      allowfullscreen title="News coverage"></iframe></div>
+    <div id="lbNote">News footage plays from YouTube (needs internet) &middot; Esc or click outside to close.</div>
+  </div>
+</div>
 
 <div id="cmpTagL" class="cmpTag">Drains clogged — today</div>
 <div id="cmpTagR" class="cmpTag">Drains cleared + Odaw dredged</div>
@@ -1292,8 +1313,7 @@ function selectPlace(p) {
   $("cardWater").style.display = A.w ? "block" : "none";
   $("cardToll").innerHTML = A.k ? "<b>The toll:</b> " + A.k : "";
   $("cardToll").style.display = A.k ? "block" : "none";
-  $("cardLinks").innerHTML = (A.v || []).map(l =>
-    `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]} &#8599;</a>`).join("");
+  $("cardLinks").innerHTML = linkHtml(A.v);
   $("cardLinks").style.display = A.v ? "flex" : "none";
   $("cardElev").textContent = p.gy.toFixed(0) + " m";
   refreshCard();
@@ -1638,8 +1658,7 @@ function tourStop() {
   $("tourYr").textContent = pl && pl.aff ? "· flooded " + pl.aff.y : "";
   $("tourTxt").textContent = item.c;
   const tv = (pl && pl.aff && pl.aff.v) || [];
-  $("tourLinks").innerHTML = tv.map(l =>
-    `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]} &#8599;</a>`).join("");
+  $("tourLinks").innerHTML = linkHtml(tv);
   $("tourLinks").style.display = tv.length ? "flex" : "none";
   $("tourProg").textContent = (tourIdx + 1) + " / " + TOUR.length;
 }
@@ -1887,6 +1906,44 @@ console.log("%cAccra // flood grid", "color:#e8590c;font-weight:bold;font-size:1
 console.log("%cpsst — the president's flood flyover is hidden in here. try a classic cheat code.",
   "color:#8b8071");
 
+// ---------- YouTube lightbox for news coverage ----------
+let lbOpen = false;
+function ytId(u) {
+  const m = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+function linkHtml(v) {
+  return (v || []).map(l => {
+    const id = ytId(l[1]);
+    return id
+      ? `<a href="#" data-yt="${id}" data-t="${l[0].replace(/"/g, "&quot;")}">&#9654; ${l[0]}</a>`
+      : `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]} &#8599;</a>`;
+  }).join("");
+}
+function openLb(id, title) {
+  lbOpen = true;
+  $("lbTitle").textContent = title || "News coverage";
+  $("lbIf").src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&rel=0";
+  $("lb").style.display = "flex";
+}
+function closeLb() {
+  lbOpen = false;
+  $("lbIf").src = "";
+  $("lb").style.display = "none";
+}
+for (const holder of ["cardLinks", "tourLinks"])
+  $(holder).addEventListener("click", e => {
+    const a = e.target.closest("a[data-yt]");
+    if (!a) return;
+    e.preventDefault();
+    openLb(a.dataset.yt, a.dataset.t);
+  });
+$("lbX").onclick = closeLb;
+$("lb").addEventListener("click", e => { if (e.target === $("lb")) closeLb(); });
+addEventListener("keydown", e => {
+  if (e.key === "Escape" && lbOpen) { closeLb(); e.stopImmediatePropagation(); }
+}, true);
+
 // hide / show the control panel (button + H key) — for a clean view / recording
 function togglePanel(force) {
   const hide = force !== undefined ? force : !$("panel").classList.contains("hidden");
@@ -1979,7 +2036,7 @@ function animate() {
     if (k >= 1) flyTween = null;
   }
   if (chopperActive) updateChopper(dt);
-  if (tourActive) {
+  if (tourActive && !lbOpen) { // hold the tour while a news video is playing
     tourStopT += dt;
     if (tourStopT > STOP_DUR) tourStop();
   }
