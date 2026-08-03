@@ -102,6 +102,12 @@
   #lbFrame { position:relative; width:100%; aspect-ratio:16/9; background:#000; }
   #lbFrame iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
   #lbNote { padding:8px 16px 12px; color:#8f8471; font:10.5px "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  #ctxLost { position:fixed; inset:0; z-index:70; display:none; align-items:center;
+    justify-content:center; background:rgba(239,233,220,.96); text-align:center;
+    font:14px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#2b2620; }
+  #ctxLost p { color:#7a6f60; font-size:12.5px; max-width:340px; margin:8px auto 14px; line-height:1.5; }
+  #ctxLost button { background:#e8590c; border:1px solid #d14e08; color:#fff; font-weight:600;
+    border-radius:8px; padding:7px 18px; cursor:pointer; font-size:12.5px; }
   #labels { position:fixed; inset:0; pointer-events:none; z-index:5; overflow:hidden; }
   .lbl { position:absolute; transform:translate(-50%,-100%); pointer-events:auto; cursor:pointer;
     font:11px "Helvetica Neue",Helvetica,Arial,sans-serif; color:#5a5044; white-space:nowrap; display:none;
@@ -354,6 +360,13 @@
     &nbsp; <b>&uarr;</b>/<b>&darr;</b> climb &middot; descend</div>
 </div>
 <div id="toast"></div>
+<div id="ctxLost">
+  <div>
+    <b>Graphics context was lost</b>
+    <p>The browser reset the GPU — usually after a long pause or another heavy tab.</p>
+    <button onclick="location.reload()">Reload the map</button>
+  </div>
+</div>
 
 <div id="lb">
   <div id="lbBox">
@@ -382,6 +395,23 @@
 <script>const P = {"__PAYLOAD__":1};</script>
 <script>
 "use strict";
+// Old or locked-down devices may have no WebGL at all — say so instead of
+// leaving a blank page behind a 22 MB download.
+(function () {
+  const probe = document.createElement("canvas");
+  const ok = !!(window.WebGLRenderingContext &&
+    (probe.getContext("webgl2") || probe.getContext("webgl")));
+  if (!ok) {
+    const el = document.getElementById("ctxLost");
+    el.querySelector("b").textContent = "3D graphics unavailable";
+    el.querySelector("p").textContent =
+      "This browser or device can't run WebGL, which the flood simulation needs. " +
+      "Try a recent Chrome, Edge, Firefox or Safari with hardware acceleration on.";
+    el.querySelector("button").style.display = "none";
+    el.style.display = "flex";
+    throw new Error("WebGL unavailable — halting init");
+  }
+})();
 // ---------- payload decode ----------
 function b64(s, T) {
   const bin = atob(s), n = bin.length, u8 = new Uint8Array(n);
@@ -389,9 +419,10 @@ function b64(s, T) {
   return new T(u8.buffer);
 }
 const M = P.meta, GN = M.grid.n, CELL = M.grid.cell, SPAN = GN * CELL, INV = 1 / M.scale;
-const bLen = b64(P.bLen, Uint16Array), bStart = b64(P.bStart, Int32Array),
-      bDelta = b64(P.bDelta, Int16Array), bH = b64(P.bH, Float32Array),
-      rLen = b64(P.rLen, Uint16Array), rStart = b64(P.rStart, Int32Array),
+// building arrays are `let` so they can be released once the mesh is built
+let bLen = b64(P.bLen, Uint16Array), bStart = b64(P.bStart, Int32Array),
+    bDelta = b64(P.bDelta, Int16Array), bH = b64(P.bH, Float32Array);
+const rLen = b64(P.rLen, Uint16Array), rStart = b64(P.rStart, Int32Array),
       rDelta = b64(P.rDelta, Int16Array), rClass = b64(P.rClass, Uint8Array),
       wLen = b64(P.wLen, Uint16Array), wStart = b64(P.wStart, Int32Array),
       wDelta = b64(P.wDelta, Int16Array), wClass = b64(P.wClass, Uint8Array),
@@ -403,6 +434,8 @@ const bLen = b64(P.bLen, Uint16Array), bStart = b64(P.bStart, Int32Array),
       maskU8 = b64(P.mask, Uint8Array), densU8 = b64(P.dens, Uint8Array);
 const elev = new Float32Array(GN * GN);
 for (let i = 0; i < elev.length; i++) elev[i] = elevU16[i] * M.grid.elev_scale + M.grid.elev_off;
+// the base64 payload is ~21 MB of strings; everything is decoded above, so let it go
+for (const k in P) if (k !== "meta") P[k] = null;
 
 function groundAt(mx, my) { // bilinear, mx/my in meters from origin
   const gx = Math.min(Math.max(mx / CELL - 0.5, 0), GN - 1.001),
@@ -432,10 +465,27 @@ const HALF = SPAN / 2;
 const wx = mx => mx - HALF, wz = my => HALF - my; // world coords
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+// Weaker devices (phones, low-RAM laptops) can't carry the full model at full
+// resolution. Scale the pixel ratio and the building budget to the hardware.
+const LOW_END = (navigator.deviceMemory && navigator.deviceMemory <= 4) ||
+                (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+                Math.min(screen.width, screen.height) < 500;
+const renderer = new THREE.WebGLRenderer({
+  antialias: !LOW_END, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
+// A GPU reset (tab backgrounded for long, driver hiccup, laptop sleep) would
+// otherwise leave a permanently black canvas with no explanation.
+let ctxLost = false;
+renderer.domElement.addEventListener("webglcontextlost", e => {
+  e.preventDefault(); ctxLost = true;
+  const b = document.getElementById("ctxLost");
+  if (b) b.style.display = "flex";
+});
+renderer.domElement.addEventListener("webglcontextrestored", () => {
+  location.reload(); // simplest correct recovery: rebuild every GPU resource
+});
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xefe9dc);
 scene.fog = new THREE.Fog(0xefe9dc, 9000, 34000);
@@ -478,9 +528,21 @@ const auxTex = new THREE.DataTexture(auxData, GN, GN, THREE.RGBAFormat, THREE.Un
 auxTex.needsUpdate = true; auxTex.minFilter = auxTex.magFilter = THREE.NearestFilter;
 
 // ---------- water sim (virtual pipes, ping-pong RGBA32F) ----------
+// Full-float render targets are not universal (many mobile GPUs only expose
+// half-float colour buffers). Pick the best type this device can actually
+// render to, so the sim degrades instead of failing.
+const SIM_TYPE = (() => {
+  const gl = renderer.getContext();
+  const isGL2 = typeof WebGL2RenderingContext !== "undefined" &&
+                gl instanceof WebGL2RenderingContext;
+  if (isGL2 && gl.getExtension("EXT_color_buffer_float")) return THREE.FloatType;
+  if (gl.getExtension("EXT_color_buffer_half_float") ||
+      (isGL2 && gl.getExtension("EXT_color_buffer_half_float"))) return THREE.HalfFloatType;
+  return THREE.FloatType; // last resort: let three try, error surfaces below
+})();
 function makeRT() {
   return new THREE.WebGLRenderTarget(GN, GN, {
-    format: THREE.RGBAFormat, type: THREE.FloatType,
+    format: THREE.RGBAFormat, type: SIM_TYPE,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: false, stencilBuffer: false });
 }
@@ -733,7 +795,8 @@ scene.add(waterMesh);
 // ---------- buildings ----------
 const buildings = decodeLines(bLen, bStart, bDelta);
 const nB = buildings.length;
-const areas = new Float32Array(nB);
+bLen = bStart = bDelta = null; // ~13 MB of deltas, now expanded into `buildings`
+let areas = new Float32Array(nB);
 for (let i = 0; i < nB; i++) {
   const p = buildings[i]; let a = 0;
   const n = p.length / 2;
@@ -760,13 +823,15 @@ for (let i = 0; i < nB; i++) {
 }
 const roofIdxCache = new Array(nB);
 for (let i = 0; i < nB; i++) {
-  const tri = earcut(Array.from(buildings[i]));
+  const tri = earcut(buildings[i]); // earcut takes the typed array directly
   roofIdxCache[i] = tri; totV += tri.length;
 }
-const posA = new Float32Array(totV * 3), colA = new Uint8Array(totV * 3),
-      nrmA = new Int8Array(totV * 3);
-const cumV = new Float32Array(nB + 1), bCell = new Uint32Array(nB),
-      bMxA = new Float32Array(nB), bMyA = new Float32Array(nB);
+// `let`, not `const`: these are dropped as soon as the BufferAttributes own them
+let posA = new Float32Array(totV * 3), colA = new Uint8Array(totV * 3),
+    nrmA = new Int8Array(totV * 3);
+// Uint32, not Float32: vertex totals pass 2^24, where float32 stops being able
+// to represent consecutive integers and the density slider clips geometry.
+const cumV = new Uint32Array(nB + 1), bCell = new Uint32Array(nB);
 const SUN = [-0.591, 0.806]; // normalized (-0.55, 0.75)
 // Accra's real roofscape: rust corrugated sheets dominate, then zinc,
 // plaster/sand, dark browns; tall buildings read as concrete.
@@ -807,7 +872,6 @@ for (let oi = 0; oi < nB; oi++) {
   const base = groundAt(cx, cy) - 0.6, top = base + 0.6 + h;
   const gi = Math.min(GN - 1, cx / CELL | 0), gj = Math.min(GN - 1, cy / CELL | 0);
   bCell[oi] = gj * GN + gi;
-  bMxA[oi] = cx; bMyA[oi] = cy;
   const [br, bg, bb] = ramp(h);
   for (let j = 0; j < n; j++) {
     const k = (j + 1) % n;
@@ -840,6 +904,19 @@ const bGeo = new THREE.BufferGeometry();
 bGeo.setAttribute("position", new THREE.BufferAttribute(posA, 3));
 bGeo.setAttribute("color", new THREE.BufferAttribute(colA, 3, true));
 bGeo.setAttribute("normal", new THREE.BufferAttribute(nrmA, 3, true));
+// hand the vertex data to the GPU and drop the CPU copy — this mesh is static,
+// and keeping it would double a ~330 MB buffer in the JS heap (mobile OOM).
+for (const name of ["position", "color", "normal"])
+  bGeo.getAttribute(name).onUpload(function () { this.array = null; });
+// per-cell building tally so flood stats never walk all 491k buildings per update
+const bldPerCell = new Uint16Array(GN * GN);
+for (let i = 0; i < nB; i++) if (bldPerCell[bCell[i]] < 65535) bldPerCell[bCell[i]]++;
+// the ring geometry and triangulations were only needed to build the mesh
+buildings.length = 0; roofIdxCache.length = 0; orderArr.length = 0;
+// release our own references; the attributes hold the arrays until GPU upload,
+// after which onUpload above drops the last one (~330 MB reclaimed)
+posA = colA = nrmA = null;
+bH = areas = null;
 const bldU = {
   uTime: uTime, uScan: uScan, uPulse: uPulse, uCam: uCam,
   uDepth: { value: null }, uSpan: uSpanU, uFloodGlow: { value: 1 },
@@ -1076,24 +1153,48 @@ for (const b of document.querySelectorAll("#spdBtns button"))
   b.onclick = () => { simRate = +b.dataset.s;
     document.querySelectorAll("#spdBtns button")
       .forEach(x => x.classList.toggle("on", x === b)); };
-$("densSlider").oninput = e => {
-  const k = Math.round(nB * (+e.target.value / 100));
+function setDensity(pct) {
+  const k = Math.round(nB * (pct / 100));
   bGeo.setDrawRange(0, k > 0 ? cumV[k] : 0);
-};
+}
+$("densSlider").oninput = e => setDensity(+e.target.value);
+if (LOW_END) { // buildings are sorted largest-first, so this keeps the skyline
+  $("densSlider").value = 55; setDensity(55);
+  $("bloomChk").disabled = true;
+}
 
 // ---------- readouts ----------
+// Stats read the depth target back to the CPU. Float targets read into a
+// Float32Array; half-float ones must read into Uint16Array, so decode via a
+// 64K lookup table (built once) rather than per-pixel bit twiddling.
 const readBuf = new Float32Array(GN * GN * 4);
+const HALF_RT = SIM_TYPE === THREE.HalfFloatType;
+const rawBuf = HALF_RT ? new Uint16Array(GN * GN * 4) : null;
+const HALF_LUT = HALF_RT ? (() => {
+  const t = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const s = (h & 0x8000) ? -1 : 1, e = (h & 0x7C00) >> 10, f = h & 0x03FF;
+    t[h] = e === 0 ? s * 6.103515625e-5 * (f / 1024)
+         : e === 31 ? (f ? NaN : s * Infinity)
+         : s * Math.pow(2, e - 15) * (1 + f / 1024);
+  }
+  return t;
+})() : null;
+function readDepth(rt, out) {
+  if (!HALF_RT) { renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, out); return; }
+  renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, rawBuf);
+  for (let i = 0; i < out.length; i += 4) out[i] = HALF_LUT[rawBuf[i]];
+}
 let landCells = 0;
 for (let i = 0; i < GN * GN; i++) if (!(maskU8[i] & 3)) landCells++;
 function updateReadouts(force) {
-  renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
-  let flooded = 0;
-  for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && convU8[i] < 90 && readBuf[i * 4] > 0.25) flooded++;
-  let bldWet = 0;
-  for (let i = 0; i < nB; i++) {
-    const c = bCell[i];
-    if (!(maskU8[c] & 3) && convU8[c] < 90 && readBuf[c * 4] > 0.3) bldWet++;
+  readDepth(depthRT[cur], readBuf);
+  let flooded = 0, bldWet = 0;
+  for (let i = 0; i < GN * GN; i++) {
+    if ((maskU8[i] & 3) || convU8[i] >= 90) continue;
+    const d = readBuf[i * 4];
+    if (d > 0.25) flooded++;
+    if (d > 0.3) bldWet += bldPerCell[i]; // pre-tallied per cell, not per building
   }
   const floodKm2 = flooded * CELL * CELL / 1e6;
   $("rFlood").textContent = floodKm2.toFixed(1) + " km²";
@@ -1571,13 +1672,13 @@ $("tlReplay").onclick = () => {
 let splitX = 0.5;
 const readBufB = new Float32Array(GN * GN * 4);
 function floodStats(rt, buf) {
-  renderer.readRenderTargetPixels(rt, 0, 0, GN, GN, buf);
+  readDepth(rt, buf);
   let flooded = 0, bld = 0;
-  for (let i = 0; i < GN * GN; i++)
-    if (!(maskU8[i] & 3) && convU8[i] < 90 && buf[i * 4] > 0.25) flooded++;
-  for (let i = 0; i < nB; i++) {
-    const c = bCell[i];
-    if (!(maskU8[c] & 3) && convU8[c] < 90 && buf[c * 4] > 0.3) bld++;
+  for (let i = 0; i < GN * GN; i++) {
+    if ((maskU8[i] & 3) || convU8[i] >= 90) continue;
+    const d = buf[i * 4];
+    if (d > 0.25) flooded++;
+    if (d > 0.3) bld += bldPerCell[i];
   }
   return { km2: flooded * CELL * CELL / 1e6, bld };
 }
@@ -1977,6 +2078,9 @@ const clock = new THREE.Clock();
 let frame = 0;
 function animate() {
   requestAnimationFrame(animate);
+  if (ctxLost) return; // GPU is gone; don't spam draw calls
+  // (background tabs are already handled by the browser throttling rAF —
+  // don't gate on document.hidden, some embedded viewers report hidden while visible)
   const dt = Math.min(clock.getDelta(), 0.1);
   uTime.value += dt;
   uCam.value.copy(camera.position);
@@ -2104,7 +2208,7 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
   chopState: () => ({ active: chopperActive, t: chopT, stops: chopStops.length,
     camY: camera.position.y.toFixed(0) }),
   sample: (gx, gy) => { // depth + elev + mask at grid cell, incl. masked cells
-    renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
+    readDepth(depthRT[cur], readBuf);
     const i = gy * GN + gx;
     return { d: +readBuf[i * 4].toFixed(3), elev: +elev[i].toFixed(2),
              mask: maskU8[i], conv: convU8[i] };
@@ -2119,7 +2223,7 @@ window.FG = { camera, controls, simU, simReset, storm, waterMesh, terrainMesh,
     updateReadouts(true);
   },
   probe: () => {
-    renderer.readRenderTargetPixels(depthRT[cur], 0, 0, GN, GN, readBuf);
+    readDepth(depthRT[cur], readBuf);
     let vol = 0, mx = 0, mi = -1, n25 = 0, n05 = 0;
     for (let i = 0; i < GN * GN; i++) {
       if (maskU8[i] & 3) continue;
