@@ -13,6 +13,7 @@ import json
 import math
 import re
 import time
+from pathlib import Path
 
 import numpy as np
 import rasterio
@@ -23,7 +24,7 @@ from pyproj import Transformer
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import transform as shp_transform
 
-DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
+DATA = str(Path(__file__).resolve().parent.parent / "data")  # <repo>/data, wherever the repo lives
 BBOX = (-0.32, 5.52, -0.12, 5.70)  # W, S, E, N
 GRID_N = 512
 SCALE = 10  # decimeters

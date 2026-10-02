@@ -5,11 +5,12 @@ UTM origin (recomputed identically to pack_payload.py).
 """
 import json
 import math
+from pathlib import Path
 
 import osmium
 from pyproj import Transformer
 
-DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
+DATA = str(Path(__file__).resolve().parent.parent / "data")  # <repo>/data, wherever the repo lives
 BBOX = (-0.32, 5.52, -0.12, 5.70)
 T = Transformer.from_crs("EPSG:4326", "EPSG:32630", always_xy=True)
 w, s = T.transform(BBOX[0], BBOX[1])

@@ -1,7 +1,8 @@
 // Headless self-consistency check of the assembled HTML payload + libs.
 const fs = require("fs");
+const path = require("path");
 const html = fs.readFileSync(
-  "/Users/osborn/BIG PROJECT/accra-flood-grid/dist/accra-flood-grid.html", "utf8");
+  path.join(__dirname, "..", "dist", "accra-flood-grid.html"), "utf8");
 
 for (const lib of ["OrbitControls", "UnrealBloomPass", "EffectComposer",
                    "LuminosityHighPassShader", "window.earcut", '"147"']) {

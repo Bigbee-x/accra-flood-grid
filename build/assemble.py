@@ -1,7 +1,7 @@
 """Splice libs + payload into the template -> dist/accra-flood-grid.html."""
 import os
 
-ROOT = "/Users/osborn/BIG PROJECT/accra-flood-grid"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root, wherever it lives
 TP = f"{ROOT}/build/three-pkg"
 
 with open(f"{ROOT}/build/template.html") as f:

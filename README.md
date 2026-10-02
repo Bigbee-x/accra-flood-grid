@@ -69,8 +69,6 @@ python3 assemble.py        # template + libs + payload -> dist/accra-flood-grid.
 node smoke_test.js         # payload self-consistency check
 ```
 
-(Paths in the build scripts are absolute for the original machine — adjust `DATA`/`ROOT` constants if you rebuild elsewhere.)
-
 Hit the **☰** button (top-right) or press **H** to hide the control panel for a clean, unobstructed view — handy for screenshots and recording.
 
 ## Honest limits

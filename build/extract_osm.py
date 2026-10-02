@@ -7,6 +7,7 @@ Outputs newline-delimited GeoJSON-ish records per layer (lon/lat, EPSG:4326).
 import json
 import sys
 import time
+from pathlib import Path
 
 import osmium
 
@@ -20,7 +21,7 @@ WATERWAY_CLASSES = {"drain", "river", "stream", "canal", "ditch"}
 GREEN_LEISURE = {"park", "pitch", "stadium", "golf_course", "garden", "nature_reserve"}
 GREEN_LANDUSE = {"grass", "forest", "recreation_ground", "cemetery", "meadow", "orchard"}
 GREEN_NATURAL = {"wood", "scrub"}
-DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
+DATA = str(Path(__file__).resolve().parent.parent / "data")  # <repo>/data, wherever the repo lives
 
 
 def in_bbox(lon, lat):

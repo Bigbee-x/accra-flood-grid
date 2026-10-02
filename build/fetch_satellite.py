@@ -8,6 +8,7 @@ Credit: contains modified Copernicus Sentinel data.
 import json
 import math
 import urllib.request
+from pathlib import Path
 
 import numpy as np
 import rasterio
@@ -15,7 +16,7 @@ from rasterio.windows import from_bounds
 from rasterio.enums import Resampling
 from pyproj import Transformer
 
-DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
+DATA = str(Path(__file__).resolve().parent.parent / "data")  # <repo>/data, wherever the repo lives
 BBOX = (-0.32, 5.52, -0.12, 5.70)
 GRID_N, TEX = 512, 2048
 

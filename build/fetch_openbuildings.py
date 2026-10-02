@@ -12,12 +12,13 @@ import io
 import json
 import time
 import urllib.request
+from pathlib import Path
 
 from shapely import wkt
 
 URL = ("https://storage.googleapis.com/open-buildings-data/v3/"
        "polygons_s2_level_6_gzip_no_header/0fdf_buildings.csv.gz")
-DATA = "/Users/osborn/BIG PROJECT/accra-flood-grid/data"
+DATA = str(Path(__file__).resolve().parent.parent / "data")  # <repo>/data, wherever the repo lives
 BBOX = (-0.32, 5.52, -0.12, 5.70)
 MIN_CONF, MIN_AREA = 0.70, 20.0
 
